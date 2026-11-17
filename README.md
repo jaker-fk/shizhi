@@ -10,6 +10,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white&style=flat-square)](https://www.docker.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white&style=flat-square)](https://fastapi.tiangolo.com/)
 [![MySQL](https://img.shields.io/badge/MySQL-8.4-4479A1?logo=mysql&logoColor=white&style=flat-square)](https://www.mysql.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 [![GitHub stars](https://img.shields.io/github/stars/jaker-fk/shizhi?style=social)](https://github.com/jaker-fk/shizhi/stargazers)
 [![GitHub last commit](https://img.shields.io/github/last-commit/jaker-fk/shizhi?style=flat-square)](https://github.com/jaker-fk/shizhi/commits/main)
@@ -177,6 +178,7 @@ docker compose exec -T mysql sh -c \
 │   └── PUBLIC_DEPLOYMENT.md # 公网化开发路线
 ├── .github/workflows/ci.yml # GitHub Actions 校验
 ├── start.bat               # Windows 一键启动
+├── LICENSE                 # MIT License
 └── README.md
 ```
 
@@ -248,6 +250,10 @@ copy(localStorage.getItem("shizhi.knowledge.v1"))
 - 安全问题请优先通过 GitHub Security Advisories 私下报告，不要在公开 Issue 中贴出敏感信息。
 
 如果这个项目对你有帮助，欢迎点一个 **Star** ⭐，这是对作者最直接的鼓励。
+
+## License
+
+本项目基于 [MIT License](LICENSE) 开源，可以自由使用、修改、分发和商用，但请保留原始版权声明。
 
 ## 说明
 

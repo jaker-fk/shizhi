@@ -1,0 +1,12 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+.tmp*
+preview.png
+README.md
+start*.bat
+docker-compose.yml
+.env
+.env.*
+backend/

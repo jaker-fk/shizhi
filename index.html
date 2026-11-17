@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="拾知 —— 一个轻量、私密的知识点记录本。随手记录，随时找回。">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f3f0e9">
+  <title>拾知 · 知识点手记</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- 图标库：全部使用内联 SVG，不依赖网络 -->
+  <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7"></circle>
+      <path d="m20 20-3.2-3.2"></path>
+    </symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24">
+      <path d="M12 5v14M5 12h14"></path>
+    </symbol>
+    <symbol id="icon-star" viewBox="0 0 24 24">
+      <path d="m12 3.8 2.5 5.1 5.6.8-4.05 3.95.96 5.58L12 16.6l-5.01 2.63.96-5.58L3.9 9.7l5.6-.8L12 3.8Z"></path>
+    </symbol>
+    <symbol id="icon-edit" viewBox="0 0 24 24">
+      <path d="M4 20h4.2L19 9.2 14.8 5 4 15.8V20Z"></path>
+      <path d="m13.5 6.3 4.2 4.2"></path>
+    </symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24">
+      <path d="M4 7h16M9 7V4.8h6V7M6.5 7l.8 13h9.4l.8-13M10 11v5.5M14 11v5.5"></path>
+    </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24">
+      <rect x="8.5" y="8.5" width="11" height="11" rx="2"></rect>
+      <path d="M15.5 8.5v-2a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2"></path>
+    </symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24">
+      <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"></path>
+    </symbol>
+    <symbol id="icon-upload" viewBox="0 0 24 24">
+      <path d="M12 16V5m0 0 4 4m-4-4L8 9M5 19h14"></path>
+    </symbol>
+    <symbol id="icon-grid" viewBox="0 0 24 24">
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.4"></rect>
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.4"></rect>
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.4"></rect>
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4"></rect>
+    </symbol>
+    <symbol id="icon-list" viewBox="0 0 24 24">
+      <path d="M9 6h11M9 12h11M9 18h11"></path>
+      <circle cx="4.5" cy="6" r="1"></circle>
+      <circle cx="4.5" cy="12" r="1"></circle>
+      <circle cx="4.5" cy="18" r="1"></circle>
+    </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24">
+      <path d="m6 6 12 12M18 6 6 18"></path>
+    </symbol>
+    <symbol id="icon-book" viewBox="0 0 24 24">
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z"></path>
+      <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5v-16Z"></path>
+    </symbol>
+    <symbol id="icon-bookmark" viewBox="0 0 24 24">
+      <path d="M6.5 4h11v16L12 16.2 6.5 20V4Z"></path>
+    </symbol>
+    <symbol id="icon-tag" viewBox="0 0 24 24">
+      <path d="m11.2 3.8 8.9.1.1 8.9-9.7 9.7a1.8 1.8 0 0 1-2.6 0l-6.4-6.4a1.8 1.8 0 0 1 0-2.6l9.7-9.7Z"></path>
+      <circle cx="16.2" cy="7.8" r="1.2"></circle>
+    </symbol>
+    <symbol id="icon-link" viewBox="0 0 24 24">
+      <path d="m9.5 14.5 5-5M7.2 17.5l-1 .9a3.8 3.8 0 0 1-5.3-5.3l3.3-3.3a3.8 3.8 0 0 1 5.3 0M16.8 6.5l1-.9a3.8 3.8 0 1 1 5.4 5.3l-3.3 3.3a3.8 3.8 0 0 1-5.4 0"></path>
+    </symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.5"></circle>
+      <path d="M12 7.5V12l3 2"></path>
+    </symbol>
+    <symbol id="icon-undo" viewBox="0 0 24 24">
+      <path d="M9 7 4 12l5 5"></path>
+      <path d="M4 12h9a6 6 0 0 1 6 6v1"></path>
+    </symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24">
+      <path d="m5 12.5 4.5 4.5L19 7.5"></path>
+    </symbol>
+    <symbol id="icon-spark" viewBox="0 0 24 24">
+      <path d="M12 3.5c.4 5 3 7.6 8 8-5 .4-7.6 3-8 8-.4-5-3-7.6-8-8 5-.4 7.6-3 8-8Z"></path>
+    </symbol>
+    <symbol id="icon-folder" viewBox="0 0 24 24">
+      <path d="M3.5 6.5A2.5 2.5 0 0 1 6 4h4l2 2.5h6A2.5 2.5 0 0 1 20.5 9v8A2.5 2.5 0 0 1 18 19.5H6A2.5 2.5 0 0 1 3.5 17V6.5Z"></path>
+    </symbol>
+    <symbol id="icon-inbox" viewBox="0 0 24 24">
+      <path d="M4 5h16v14H4z"></path>
+      <path d="M4 13h4l1.5 2.5h5L16 13h4"></path>
+    </symbol>
+  </svg>
+
+  <div class="page">
+    <header class="topbar">
+      <a class="brand" href="#" id="brandLink" aria-label="拾知首页">
+        <span class="brand-mark" aria-hidden="true">拾</span>
+        <span class="brand-copy">
+          <span class="brand-name">拾知</span>
+          <span class="brand-tagline">KNOWLEDGE NOTES</span>
+        </span>
+      </a>
+
+      <div class="searchbox" role="search">
+        <svg class="icon search-icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+        <input id="searchInput" type="search" placeholder="搜索标题、内容或标签…" autocomplete="off" aria-label="搜索知识点" aria-controls="cardGrid">
+        <kbd class="search-kbd" aria-hidden="true">/</kbd>
+        <button class="search-clear" id="searchClear" type="button" aria-label="清空搜索" hidden>
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="data-actions">
+          <button class="icon-button top-icon" id="importBtn" type="button" aria-label="导入知识点" title="导入备份">
+            <svg class="icon" aria-hidden="true"><use href="#icon-upload"></use></svg>
+          </button>
+          <button class="icon-button top-icon" id="exportBtn" type="button" aria-label="导出知识点" title="导出备份">
+            <svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg>
+          </button>
+          <input id="importInput" type="file" accept="application/json,.json" hidden>
+        </div>
+        <button class="button button-primary new-button" id="newBtn" type="button" aria-label="新建知识点">
+          <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+          <span>新建知识点</span>
+          <kbd class="button-kbd" aria-hidden="true">N</kbd>
+        </button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="sidebar" aria-label="知识库导航">
+        <nav class="nav-block">
+          <p class="section-label">知识库</p>
+          <button class="nav-item nav-all is-active" type="button" data-nav="all">
+            <span class="nav-label">
+              <svg class="icon" aria-hidden="true"><use href="#icon-book"></use></svg>
+              全部知识点
+            </span>
+            <span class="nav-count" id="countAll">0</span>
+          </button>
+          <button class="nav-item nav-favorites" type="button" data-nav="favorites">
+            <span class="nav-label">
+              <svg class="icon" aria-hidden="true"><use href="#icon-star"></use></svg>
+              我的收藏
+            </span>
+            <span class="nav-count" id="countFavorites">0</span>
+          </button>
+        </nav>
+
+        <section class="sidebar-section" aria-labelledby="categoryHeading">
+          <div class="section-heading">
+            <p class="section-label" id="categoryHeading">分类</p>
+            <span class="section-rule" aria-hidden="true"></span>
+          </div>
+          <div class="category-list" id="categoryList"></div>
+        </section>
+
+        <section class="sidebar-section" aria-labelledby="tagHeading">
+          <div class="section-heading">
+            <p class="section-label" id="tagHeading">标签</p>
+            <span class="section-rule" aria-hidden="true"></span>
+          </div>
+          <div class="tag-cloud" id="tagCloud"></div>
+        </section>
+
+        <blockquote class="sidebar-quote">
+          <svg class="quote-spark" aria-hidden="true"><use href="#icon-spark"></use></svg>
+          <p>知识不是用来收藏的，<br>是用来重新遇见的。</p>
+          <span>— 拾知手记</span>
+        </blockquote>
+
+        <div class="sidebar-footer">
+          <span class="status-dot is-loading" id="dbStatusDot" aria-hidden="true"></span>
+          <span id="dbStatusText">正在连接 MySQL…</span>
+        </div>
+      </aside>
+
+      <main class="main" id="mainContent">
+        <section class="content-head" aria-labelledby="pageTitle">
+          <div class="heading-copy">
+            <p class="eyebrow" id="pageEyebrow">KNOWLEDGE BASE</p>
+            <h1 id="pageTitle">全部知识点</h1>
+            <p class="page-subtitle" id="pageSubtitle">把散落的想法，收进同一座岛屿。</p>
+          </div>
+          <div class="view-controls">
+            <label class="sort-control">
+              <span>排序</span>
+              <select id="sortSelect" aria-label="知识点排序方式">
+                <option value="updated">最近更新</option>
+                <option value="created">最近创建</option>
+                <option value="title">按标题</option>
+              </select>
+            </label>
+            <div class="view-toggle" role="group" aria-label="视图方式">
+              <button class="view-button is-active" id="gridViewBtn" type="button" aria-label="卡片视图" aria-pressed="true" title="卡片视图">
+                <svg class="icon" aria-hidden="true"><use href="#icon-grid"></use></svg>
+              </button>
+              <button class="view-button" id="listViewBtn" type="button" aria-label="列表视图" aria-pressed="false" title="列表视图">
+                <svg class="icon" aria-hidden="true"><use href="#icon-list"></use></svg>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div class="filter-bar" id="filterBar" hidden></div>
+
+        <div class="result-note" id="resultNote" aria-live="polite"></div>
+
+        <section class="card-grid" id="cardGrid" aria-label="知识点列表"></section>
+
+        <section class="empty-state" id="emptyState" hidden>
+          <div class="empty-art" aria-hidden="true">
+            <span class="paper paper-back"></span>
+            <span class="paper paper-middle"></span>
+            <span class="paper paper-front">
+              <span class="paper-line paper-line-wide"></span>
+              <span class="paper-line"></span>
+              <span class="paper-line paper-line-short"></span>
+            </span>
+            <span class="empty-plus">+</span>
+          </div>
+          <p class="eyebrow">A FRESH PAGE</p>
+          <h2>这里还空着，正好开始。</h2>
+          <p>记下一个概念、一段代码，或者今天刚想明白的事。<br>所有内容都会保存到 MySQL 数据库中。</p>
+          <div class="empty-actions">
+            <button class="button button-primary" id="emptyAddBtn" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+              写下第一条
+            </button>
+            <button class="button button-ghost" id="sampleBtn" type="button">载入示例看看</button>
+          </div>
+        </section>
+
+        <section class="no-results" id="noResults" hidden>
+          <div class="no-results-icon" aria-hidden="true">
+            <svg class="icon"><use href="#icon-search"></use></svg>
+          </div>
+          <h2>没有找到对应的知识点</h2>
+          <p>换个关键词试试，或者清空当前的筛选条件。</p>
+          <button class="button button-ghost" id="clearFiltersBtn" type="button">清空筛选</button>
+        </section>
+
+        <section class="server-error" id="serverError" hidden>
+          <div class="server-error-icon" aria-hidden="true">
+            <svg class="icon"><use href="#icon-inbox"></use></svg>
+          </div>
+          <p class="eyebrow">CONNECTION LOST</p>
+          <h2>暂时连不上数据库</h2>
+          <p>请确认 Docker 服务正在运行，然后重新连接。<br>已保存的知识点不会因此丢失。</p>
+          <p class="server-error-detail" id="serverErrorDetail"></p>
+          <button class="button button-primary" id="retryLoadBtn" type="button">
+            <svg class="icon" aria-hidden="true"><use href="#icon-undo"></use></svg>
+            重新连接
+          </button>
+        </section>
+
+        <footer class="main-footer">
+          <span>拾知 · 慢慢积累，常常回看</span>
+          <span class="footer-hints">
+            <kbd>/</kbd> 搜索
+            <span class="hint-divider"></span>
+            <kbd>N</kbd> 新建
+          </span>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <dialog class="editor-dialog" id="editorDialog" aria-labelledby="editorTitle">
+    <form class="editor-panel" id="knowledgeForm" novalidate>
+      <header class="editor-head">
+        <div>
+          <p class="eyebrow" id="editorEyebrow">NEW NOTE</p>
+          <h2 id="editorTitle">新建知识点</h2>
+        </div>
+        <button class="icon-button dialog-close" id="editorClose" type="button" aria-label="关闭编辑窗口">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+        </button>
+      </header>
+
+      <div class="editor-body">
+        <div class="field">
+          <label for="titleInput">标题 <span class="required">*</span></label>
+          <input class="input input-title" id="titleInput" name="title" type="text" maxlength="120" placeholder="比如：费曼学习法" required autocomplete="off">
+          <p class="field-error" id="titleError" hidden>请给这条知识点起一个标题。</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="categoryInput">分类</label>
+            <input class="input" id="categoryInput" name="category" type="text" maxlength="30" list="categoryOptions" placeholder="未分类" autocomplete="off">
+            <datalist id="categoryOptions"></datalist>
+          </div>
+          <div class="field">
+            <label for="tagInput">标签</label>
+            <input class="input" id="tagInput" name="tags" type="text" maxlength="160" placeholder="学习，方法，输出" autocomplete="off">
+            <p class="field-hint">用逗号分隔多个标签</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <label for="contentInput">内容</label>
+            <span class="char-count" id="contentCount">0 字</span>
+          </div>
+          <textarea class="input textarea" id="contentInput" name="content" rows="8" maxlength="12000" placeholder="写下解释、例子、代码或自己的理解……"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="sourceInput">来源 / 出处 <span class="optional">选填</span></label>
+          <input class="input" id="sourceInput" name="source" type="text" maxlength="300" placeholder="书名、网址或一句话备注" autocomplete="off">
+        </div>
+
+        <label class="favorite-switch">
+          <input id="favoriteInput" name="favorite" type="checkbox">
+          <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+          <span class="switch-copy">
+            <strong>加入收藏</strong>
+            <small>收藏的知识点可以在左侧快速找到</small>
+          </span>
+          <svg class="icon switch-star" aria-hidden="true"><use href="#icon-star"></use></svg>
+        </label>
+      </div>
+
+      <footer class="editor-foot">
+        <span class="save-hint"><kbd>Ctrl</kbd><span>+</span><kbd>Enter</kbd> 保存</span>
+        <div class="editor-buttons">
+          <button class="button button-ghost" id="editorCancel" type="button">取消</button>
+          <button class="button button-primary" id="saveBtn" type="submit">
+            <svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+            <span id="saveBtnText">保存知识点</span>
+          </button>
+        </div>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="confirm-dialog" id="deleteDialog" aria-labelledby="deleteTitle">
+    <div class="confirm-panel">
+      <div class="confirm-icon" aria-hidden="true">
+        <svg class="icon"><use href="#icon-trash"></use></svg>
+      </div>
+      <h2 id="deleteTitle">删除这条知识点？</h2>
+      <p>《<span id="deleteItemTitle"></span>》将被移出知识库。删除后仍可在提示条中撤销。</p>
+      <div class="confirm-actions">
+        <button class="button button-ghost" id="deleteCancel" type="button">先留着</button>
+        <button class="button button-danger" id="deleteConfirm" type="button">确认删除</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
+
+  <noscript>
+    <div class="noscript">这个知识库需要启用 JavaScript 才能使用。</div>
+  </noscript>
+
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

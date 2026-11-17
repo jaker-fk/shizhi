@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="9" fill="#202a26"/>
+  <circle cx="25" cy="8" r="2.2" fill="#d58b68"/>
+  <text x="9" y="23" fill="#f7f2e7" font-family="Songti SC, SimSun, serif" font-size="19" font-weight="700">拾</text>
+</svg>

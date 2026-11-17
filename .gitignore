@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.tmp-*
+.tmp-downloads/
+.env
+backend/__pycache__/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+shizhi-backup.sql

@@ -557,9 +557,15 @@
   }
 
   async function migrateLegacyLocalData() {
+    if (!state.user) {
+      return;
+    }
+
+    // 迁移标记按用户保存：旧账号被删除后，新账号仍可回收浏览器里的旧数据。
+    const migrationKey = `${LEGACY_MIGRATION_KEY}.${state.user.id}`;
     let raw = null;
     try {
-      if (window.localStorage.getItem(LEGACY_MIGRATION_KEY) === "1") {
+      if (window.localStorage.getItem(migrationKey) === "1") {
         return;
       }
       raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -569,7 +575,7 @@
 
     const markDone = () => {
       try {
-        window.localStorage.setItem(LEGACY_MIGRATION_KEY, "1");
+        window.localStorage.setItem(migrationKey, "1");
       } catch (error) {
         /* 迁移标记失败不阻塞主流程 */
       }

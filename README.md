@@ -269,7 +269,7 @@ docker compose exec -T mysql sh -c \
 <details>
 <summary><strong>从旧版本迁移</strong></summary>
 
-旧版知识点保存在浏览器 `localStorage`（键名 `shizhi.knowledge.v1`）。新版首次连接空库时，会自动检测同一来源下的旧数据并导入。
+旧版知识点保存在浏览器 `localStorage`（键名 `shizhi.knowledge.v1`）。新版首次连接空库时，会自动检测同一来源下的旧数据并导入。迁移标记按账号保存，即使之前迁移到的账号被删除，新账号仍可重新接收旧数据。
 
 如果自动迁移失败，或旧页面使用的是不同地址（`localhost` 与 `127.0.0.1` 属于不同站点），可在旧页面 Console 执行：
 

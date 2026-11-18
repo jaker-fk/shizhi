@@ -98,6 +98,21 @@ docker compose down
 
 > `docker compose down -v` 会删除 MySQL 数据卷。除非明确要清空数据，否则不要加 `-v`。
 
+### 页面提示「暂时连不上数据库」怎么办
+
+先确认服务本身正常：
+
+```bash
+docker compose ps
+curl http://127.0.0.1:8765/api/health
+```
+
+如果健康检查返回 `{"status":"ok","database":"mysql"}`，页面却仍报错，通常是浏览器还在使用**加入登录功能之前的旧 `app.js`**。旧脚本不知道 `/api/auth/me`，会直接请求需要登录的 `/api/knowledge`，得到 `401` 后误显示为数据库错误。
+
+请按 **`Ctrl + F5`**（macOS 为 `Cmd + Shift + R`）强制刷新一次。新版已经给 HTML/JS/CSS 设置 `Cache-Control: no-cache`，并给资源加了版本参数，后续更新不会再被旧缓存卡住。
+
+强制刷新后应看到登录页；首次使用点击「创建账号」即可。
+
 ## 技术架构
 
 ```mermaid

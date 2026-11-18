@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#f3f0e9">
   <title>拾知 · 知识点手记</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
   <!-- 图标库：全部使用内联 SVG，不依赖网络 -->
@@ -354,7 +354,7 @@
             <svg class="icon"><use href="#icon-inbox"></use></svg>
           </div>
           <p class="eyebrow">CONNECTION LOST</p>
-          <h2>暂时连不上数据库</h2>
+          <h2>暂时无法读取知识库</h2>
           <p>请确认 Docker 服务正在运行，然后重新连接。<br>已保存的知识点不会因此丢失。</p>
           <p class="server-error-detail" id="serverErrorDetail"></p>
           <button class="button button-primary" id="retryLoadBtn" type="button">
@@ -464,7 +464,7 @@
     <div class="noscript">这个知识库需要启用 JavaScript 才能使用。</div>
   </noscript>
 
-  <script src="api.js"></script>
-  <script src="app.js"></script>
+  <script src="api.js?v=2"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

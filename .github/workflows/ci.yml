@@ -29,7 +29,7 @@ jobs:
           python-version: "3.12"
 
       - name: Validate Python
-        run: python -m py_compile backend/app.py backend/db.py backend/models.py backend/schemas.py
+        run: python -m py_compile backend/app.py backend/db.py backend/models.py backend/schemas.py backend/security.py
 
       - name: Validate Docker Compose
         run: docker compose config --quiet

@@ -55,6 +55,10 @@
     loadError: false,
     saving: false,
     legacyMigrationChecked: false,
+    user: null,
+    authMode: "login",
+    authBusy: false,
+    booted: false,
   };
 
   const ui = {
@@ -62,6 +66,7 @@
     initialSnapshot: "",
     pendingDeleteId: null,
     searchTimer: null,
+    lastEmail: "",
   };
 
   const dom = {
@@ -121,6 +126,33 @@
     deleteConfirm: document.getElementById("deleteConfirm"),
     toastRegion: document.getElementById("toastRegion"),
     mainContent: document.getElementById("mainContent"),
+    pageRoot: document.getElementById("pageRoot"),
+    bootScreen: document.getElementById("bootScreen"),
+    authScreen: document.getElementById("authScreen"),
+    authEyebrow: document.getElementById("authEyebrow"),
+    authTitle: document.getElementById("authTitle"),
+    authSubtitle: document.getElementById("authSubtitle"),
+    authError: document.getElementById("authError"),
+    loginTab: document.getElementById("loginTab"),
+    registerTab: document.getElementById("registerTab"),
+    loginForm: document.getElementById("loginForm"),
+    registerForm: document.getElementById("registerForm"),
+    loginEmail: document.getElementById("loginEmail"),
+    loginPassword: document.getElementById("loginPassword"),
+    registerName: document.getElementById("registerName"),
+    registerEmail: document.getElementById("registerEmail"),
+    registerPassword: document.getElementById("registerPassword"),
+    registerConfirm: document.getElementById("registerConfirm"),
+    loginBtn: document.getElementById("loginBtn"),
+    registerBtn: document.getElementById("registerBtn"),
+    accountMenu: document.getElementById("accountMenu"),
+    accountButton: document.getElementById("accountButton"),
+    accountAvatar: document.getElementById("accountAvatar"),
+    accountName: document.getElementById("accountName"),
+    accountPopover: document.getElementById("accountPopover"),
+    accountPopoverName: document.getElementById("accountPopoverName"),
+    accountEmail: document.getElementById("accountEmail"),
+    logoutBtn: document.getElementById("logoutBtn"),
   };
 
   /* =========================================================
@@ -133,8 +165,308 @@
     loadPreferences();
     syncPreferenceControls();
     bindEvents();
+    bindAuthEvents();
     render();
-    refreshKnowledge();
+    bootstrapAuth();
+  }
+
+  async function bootstrapAuth() {
+    try {
+      const user = await window.KnowledgeAPI.me();
+      await onAuthenticated(user);
+    } catch (error) {
+      hideBootScreen();
+      showAuth("login");
+      if (error && error.status !== 401) {
+        setAuthError(error.message || "无法连接数据服务，请稍后重试。");
+      }
+    }
+  }
+
+  async function onAuthenticated(user) {
+    state.user = user;
+    state.booted = true;
+    updateAccountUI(user);
+    hideBootScreen();
+    hideAuth();
+    await refreshKnowledge();
+  }
+
+  function hideBootScreen() {
+    if (dom.bootScreen) {
+      dom.bootScreen.hidden = true;
+    }
+  }
+
+  function showAuth(mode = "login", message = "") {
+    state.user = null;
+    state.items = [];
+    state.filter = "all";
+    state.category = null;
+    state.tag = null;
+    state.query = "";
+    state.loading = false;
+    state.loadError = false;
+    if (dom.searchInput) {
+      dom.searchInput.value = "";
+    }
+
+    closeAccountMenu();
+    if (dom.editorDialog.open) {
+      dom.editorDialog.close();
+    }
+    if (dom.deleteDialog.open) {
+      dom.deleteDialog.close();
+    }
+
+    hideBootScreen();
+    dom.authScreen.hidden = false;
+    document.body.classList.add("auth-open");
+    dom.pageRoot.inert = true;
+    switchAuthMode(mode);
+    if (message) {
+      setAuthError(message);
+    }
+    render();
+    window.setTimeout(() => {
+      if (state.authMode === "register") {
+        dom.registerName.focus();
+      } else {
+        dom.loginEmail.focus();
+      }
+    }, 80);
+  }
+
+  function hideAuth() {
+    if (!dom.authScreen) {
+      return;
+    }
+    dom.authScreen.hidden = true;
+    document.body.classList.remove("auth-open");
+    dom.pageRoot.inert = false;
+  }
+
+  function switchAuthMode(mode) {
+    state.authMode = mode === "register" ? "register" : "login";
+    const isRegister = state.authMode === "register";
+
+    dom.loginForm.hidden = isRegister;
+    dom.registerForm.hidden = !isRegister;
+    dom.loginTab.classList.toggle("is-active", !isRegister);
+    dom.registerTab.classList.toggle("is-active", isRegister);
+    dom.loginTab.setAttribute("aria-selected", String(!isRegister));
+    dom.registerTab.setAttribute("aria-selected", String(isRegister));
+
+    dom.authEyebrow.textContent = isRegister ? "A NEW ISLAND" : "WELCOME BACK";
+    dom.authTitle.textContent = isRegister ? "创建账号" : "登录拾知";
+    dom.authSubtitle.textContent = isRegister
+      ? "建立只属于你的知识库。"
+      : "继续整理你的知识岛屿。";
+    clearAuthError();
+    if (ui.lastEmail && !dom.loginEmail.value) {
+      dom.loginEmail.value = ui.lastEmail;
+      dom.registerEmail.value = ui.lastEmail;
+    }
+    window.setTimeout(() => {
+      (isRegister ? dom.registerName : dom.loginEmail).focus();
+    }, 30);
+  }
+
+  function setAuthError(message) {
+    dom.authError.textContent = message;
+    dom.authError.hidden = !message;
+  }
+
+  function clearAuthError() {
+    dom.authError.textContent = "";
+    dom.authError.hidden = true;
+  }
+
+  function updateAccountUI(user) {
+    const name = (user && user.displayName) || "我的账号";
+    const email = (user && user.email) || "";
+    const initial = Array.from(name.trim())[0] || "拾";
+
+    dom.accountName.textContent = name;
+    dom.accountAvatar.textContent = initial.toUpperCase();
+    dom.accountPopoverName.textContent = name;
+    dom.accountEmail.textContent = email;
+    dom.accountButton.title = email ? `已登录：${email}` : "账户菜单";
+    dom.accountButton.setAttribute("aria-label", `账户菜单：${name}`);
+  }
+
+  function toggleAccountMenu(force) {
+    const open =
+      typeof force === "boolean" ? force : dom.accountPopover.hidden;
+    dom.accountPopover.hidden = !open;
+    dom.accountButton.setAttribute("aria-expanded", String(open));
+  }
+
+  function closeAccountMenu() {
+    if (!dom.accountPopover || dom.accountPopover.hidden) {
+      return;
+    }
+    dom.accountPopover.hidden = true;
+    dom.accountButton.setAttribute("aria-expanded", "false");
+  }
+
+  function setAuthBusy(busy) {
+    state.authBusy = busy;
+    dom.loginBtn.disabled = busy;
+    dom.registerBtn.disabled = busy;
+    dom.loginTab.disabled = busy;
+    dom.registerTab.disabled = busy;
+    dom.loginBtn.querySelector("span").textContent = busy ? "登录中…" : "登录";
+    dom.registerBtn.querySelector("span").textContent = busy
+      ? "创建中…"
+      : "创建我的知识库";
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    if (state.authBusy) {
+      return;
+    }
+    clearAuthError();
+
+    const email = dom.loginEmail.value.trim();
+    const password = dom.loginPassword.value;
+    if (!email || !password) {
+      setAuthError("请输入邮箱和密码。");
+      return;
+    }
+
+    setAuthBusy(true);
+    try {
+      const user = await window.KnowledgeAPI.login({ email, password });
+      ui.lastEmail = user.email;
+      dom.loginForm.reset();
+      dom.registerForm.reset();
+      await onAuthenticated(user);
+      if (state.user) {
+        showToast(`欢迎回来，${user.displayName || user.email}。`);
+      }
+    } catch (error) {
+      setAuthError(error.message || "登录失败，请稍后重试。");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleRegister(event) {
+    event.preventDefault();
+    if (state.authBusy) {
+      return;
+    }
+    clearAuthError();
+
+    const displayName = dom.registerName.value.trim();
+    const email = dom.registerEmail.value.trim();
+    const password = dom.registerPassword.value;
+    const confirmPassword = dom.registerConfirm.value;
+
+    if (!email || !password) {
+      setAuthError("请填写邮箱和密码。");
+      return;
+    }
+    if (password.length < 8) {
+      setAuthError("密码至少需要 8 位。");
+      dom.registerPassword.focus();
+      return;
+    }
+    if (password !== confirmPassword) {
+      setAuthError("两次输入的密码不一致。");
+      dom.registerConfirm.focus();
+      return;
+    }
+
+    setAuthBusy(true);
+    try {
+      const user = await window.KnowledgeAPI.register({
+        email,
+        password,
+        displayName,
+      });
+      ui.lastEmail = user.email;
+      dom.loginForm.reset();
+      dom.registerForm.reset();
+      await onAuthenticated(user);
+      if (state.user) {
+        showToast(`知识岛已建好，欢迎你，${user.displayName || user.email}。`, {
+          duration: 4500,
+        });
+      }
+    } catch (error) {
+      setAuthError(error.message || "创建账号失败，请稍后重试。");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    closeAccountMenu();
+    const previousEmail = state.user ? state.user.email : "";
+    dom.logoutBtn.disabled = true;
+    try {
+      await window.KnowledgeAPI.logout();
+    } catch (error) {
+      if (!error || error.status !== 401) {
+        dom.logoutBtn.disabled = false;
+        showToast("退出登录失败，请稍后重试。", { type: "error" });
+        return;
+      }
+    }
+
+    ui.lastEmail = previousEmail;
+    dom.logoutBtn.disabled = false;
+    showAuth("login");
+    showToast("已退出登录。");
+  }
+
+  function handleSessionExpired() {
+    if (!dom.authScreen.hidden) {
+      return;
+    }
+    if (state.user && state.user.email) {
+      ui.lastEmail = state.user.email;
+    }
+    showAuth("login", "登录已过期，请重新登录。");
+    showToast("登录已过期，请重新登录。", { type: "error" });
+  }
+
+  function bindAuthEvents() {
+    dom.loginTab.addEventListener("click", () => switchAuthMode("login"));
+    dom.registerTab.addEventListener("click", () => switchAuthMode("register"));
+    dom.loginForm.addEventListener("submit", handleLogin);
+    dom.registerForm.addEventListener("submit", handleRegister);
+
+    dom.accountButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleAccountMenu();
+    });
+    dom.logoutBtn.addEventListener("click", handleLogout);
+
+    document.addEventListener("click", (event) => {
+      if (!dom.accountMenu.contains(event.target)) {
+        closeAccountMenu();
+      }
+    });
+
+    [
+      dom.loginEmail,
+      dom.loginPassword,
+      dom.registerName,
+      dom.registerEmail,
+      dom.registerPassword,
+      dom.registerConfirm,
+    ].forEach((input) => {
+      input.addEventListener("input", () => {
+        clearAuthError();
+        input.removeAttribute("aria-invalid");
+      });
+    });
+
+    window.addEventListener("shizhi:unauthorized", handleSessionExpired);
   }
 
   function loadPreferences() {
@@ -188,6 +520,10 @@
       }
       return true;
     } catch (error) {
+      if (error && error.status === 401) {
+        handleSessionExpired();
+        return false;
+      }
       state.loading = false;
       state.loadError = true;
       setDbStatus("error");
@@ -316,6 +652,9 @@
   }
 
   function showApiError(error, fallback = "操作失败，请稍后重试。") {
+    if (error && error.status === 401) {
+      return;
+    }
     const message = error && error.message ? error.message : fallback;
     if (!error || !error.status || error.status >= 500) {
       setDbStatus("error");
@@ -1751,6 +2090,16 @@
 
   function handleGlobalKeydown(event) {
     const modifier = event.ctrlKey || event.metaKey;
+
+    if (!dom.bootScreen.hidden || !dom.authScreen.hidden) {
+      return;
+    }
+
+    if (event.key === "Escape" && dom.accountPopover && !dom.accountPopover.hidden) {
+      event.preventDefault();
+      closeAccountMenu();
+      return;
+    }
 
     if (dom.editorDialog.open && modifier && event.key === "Enter") {
       event.preventDefault();

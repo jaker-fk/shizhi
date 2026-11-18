@@ -90,9 +90,100 @@
       <path d="M4 5h16v14H4z"></path>
       <path d="M4 13h4l1.5 2.5h5L16 13h4"></path>
     </symbol>
+    <symbol id="icon-logout" viewBox="0 0 24 24">
+      <path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10"></path>
+      <path d="m15 8 4 4-4 4M19 12H9"></path>
+    </symbol>
+    <symbol id="icon-arrow-right" viewBox="0 0 24 24">
+      <path d="M4 12h15M13 6l6 6-6 6"></path>
+    </symbol>
   </svg>
 
-  <div class="page">
+  <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
+    <span class="boot-mark" aria-hidden="true">拾</span>
+    <p>正在打开知识库…</p>
+  </div>
+
+  <section class="auth-screen" id="authScreen" hidden aria-labelledby="authHeading">
+    <div class="auth-shell">
+      <div class="auth-visual">
+        <div class="auth-brand">
+          <span class="auth-brand-mark" aria-hidden="true">拾</span>
+          <span class="auth-brand-copy">
+            <strong>拾知</strong>
+            <small>KNOWLEDGE NOTES</small>
+          </span>
+        </div>
+        <p class="eyebrow">PRIVATE KNOWLEDGE BASE</p>
+        <h1 id="authHeading">知识，<br>只属于你。</h1>
+        <p class="auth-lead">登录后，你只会看到属于自己的知识点。每个人都有自己的知识岛屿，互不打扰。</p>
+        <ul class="auth-points">
+          <li><span></span>账号数据彼此隔离</li>
+          <li><span></span>MySQL 持久化保存</li>
+          <li><span></span>浏览器关闭后仍可找回</li>
+        </ul>
+        <blockquote class="auth-quote">“知识不是用来收藏的，<br>是用来重新遇见的。”</blockquote>
+      </div>
+
+      <div class="auth-card">
+        <div class="auth-card-head">
+          <p class="eyebrow" id="authEyebrow">WELCOME BACK</p>
+          <h2 id="authTitle">登录拾知</h2>
+          <p id="authSubtitle">继续整理你的知识岛屿。</p>
+        </div>
+
+        <div class="auth-tabs" role="tablist" aria-label="登录或注册">
+          <button class="auth-tab is-active" id="loginTab" type="button" role="tab" aria-selected="true" aria-controls="loginForm">登录</button>
+          <button class="auth-tab" id="registerTab" type="button" role="tab" aria-selected="false" aria-controls="registerForm">创建账号</button>
+        </div>
+
+        <form class="auth-form" id="loginForm" novalidate>
+          <div class="field">
+            <label for="loginEmail">邮箱</label>
+            <input class="input" id="loginEmail" name="email" type="email" autocomplete="username" placeholder="you@example.com" required>
+          </div>
+          <div class="field">
+            <label for="loginPassword">密码</label>
+            <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="输入密码" required>
+          </div>
+          <button class="button button-primary auth-submit" id="loginBtn" type="submit">
+            <span>登录</span>
+            <svg class="icon" aria-hidden="true"><use href="#icon-arrow-right"></use></svg>
+          </button>
+        </form>
+
+        <form class="auth-form" id="registerForm" novalidate hidden>
+          <div class="field">
+            <label for="registerName">称呼 <span class="optional">选填</span></label>
+            <input class="input" id="registerName" name="displayName" type="text" maxlength="80" autocomplete="nickname" placeholder="怎么称呼你？">
+          </div>
+          <div class="field">
+            <label for="registerEmail">邮箱</label>
+            <input class="input" id="registerEmail" name="email" type="email" autocomplete="username" placeholder="you@example.com" required>
+          </div>
+          <div class="field-row auth-field-row">
+            <div class="field">
+              <label for="registerPassword">密码</label>
+              <input class="input" id="registerPassword" name="password" type="password" minlength="8" autocomplete="new-password" placeholder="至少 8 位" required>
+            </div>
+            <div class="field">
+              <label for="registerConfirm">确认密码</label>
+              <input class="input" id="registerConfirm" name="confirmPassword" type="password" minlength="8" autocomplete="new-password" placeholder="再输入一次" required>
+            </div>
+          </div>
+          <button class="button button-primary auth-submit" id="registerBtn" type="submit">
+            <span>创建我的知识库</span>
+            <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+          </button>
+        </form>
+
+        <p class="auth-error" id="authError" role="alert" hidden></p>
+        <p class="auth-note">每个账号的数据库记录相互隔离，登录状态会自动保留。</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="page" id="pageRoot">
     <header class="topbar">
       <a class="brand" href="#" id="brandLink" aria-label="拾知首页">
         <span class="brand-mark" aria-hidden="true">拾</span>
@@ -126,6 +217,22 @@
           <span>新建知识点</span>
           <kbd class="button-kbd" aria-hidden="true">N</kbd>
         </button>
+        <div class="account" id="accountMenu">
+          <button class="account-button" id="accountButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="账户菜单">
+            <span class="account-avatar" id="accountAvatar" aria-hidden="true">拾</span>
+            <span class="account-name" id="accountName">我的账号</span>
+          </button>
+          <div class="account-popover" id="accountPopover" role="menu" hidden>
+            <div class="account-summary">
+              <strong id="accountPopoverName">我的账号</strong>
+              <span id="accountEmail"></span>
+            </div>
+            <button class="account-logout" id="logoutBtn" type="button" role="menuitem">
+              <svg class="icon" aria-hidden="true"><use href="#icon-logout"></use></svg>
+              退出登录
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 

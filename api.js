@@ -54,9 +54,14 @@
         }
         const message =
           detail ||
-          (response.status >= 500
-            ? "服务器暂时不可用，请稍后重试。"
-            : "请求没有成功，请检查输入后重试。");
+          (response.status === 429
+            ? "尝试次数过多，请稍后再试。"
+            : response.status >= 500
+              ? "服务器暂时不可用，请稍后重试。"
+              : "请求没有成功，请检查输入后重试。");
+        if (response.status === 401 && !path.startsWith("/auth/")) {
+          window.dispatchEvent(new CustomEvent("shizhi:unauthorized"));
+        }
         throw new ApiError(message, response.status, detail);
       }
 
@@ -108,6 +113,22 @@
     });
   }
 
+  function register(payload) {
+    return request("/auth/register", { method: "POST", body: payload });
+  }
+
+  function login(payload) {
+    return request("/auth/login", { method: "POST", body: payload });
+  }
+
+  function me() {
+    return request("/auth/me");
+  }
+
+  function logout() {
+    return request("/auth/logout", { method: "POST" });
+  }
+
   window.KnowledgeAPI = {
     list,
     create,
@@ -115,6 +136,10 @@
     remove,
     setFavorite,
     importItems,
+    register,
+    login,
+    me,
+    logout,
     ApiError,
   };
 })();

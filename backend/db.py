@@ -4,7 +4,7 @@ import logging
 import os
 import time
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
@@ -46,6 +46,37 @@ SessionLocal = sessionmaker(
 )
 
 
+def migrate_schema() -> None:
+    """为单用户旧库补充 owner_id；新库由 create_all 直接建好。"""
+    inspector = inspect(engine)
+    if "knowledge_points" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("knowledge_points")}
+    if "owner_id" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE knowledge_points "
+                    "ADD COLUMN owner_id CHAR(36) NULL AFTER id"
+                )
+            )
+        logger.info("Added owner_id column to existing knowledge_points table.")
+
+    indexes = {
+        index["name"] for index in inspect(engine).get_indexes("knowledge_points")
+    }
+    if "ix_knowledge_points_owner_updated" not in indexes:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE INDEX ix_knowledge_points_owner_updated "
+                    "ON knowledge_points (owner_id, updated_at)"
+                )
+            )
+        logger.info("Created owner_id index.")
+
+
 def init_db(max_attempts: int = 30, delay_seconds: float = 2.0) -> None:
     """等待 MySQL 就绪并建表。Compose 已经等到 healthy，这里再兜底一次。"""
     last_error: Exception | None = None
@@ -54,6 +85,7 @@ def init_db(max_attempts: int = 30, delay_seconds: float = 2.0) -> None:
             with engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
             Base.metadata.create_all(bind=engine)
+            migrate_schema()
             logger.info("MySQL connected; schema is ready.")
             return
         except OperationalError as error:

@@ -1,254 +1,211 @@
-# 从单用户知识库到公网服务：开发路线
+# 从多用户自托管到公网服务：开发路线
 
-当前版本是**单用户、无登录**的知识库：`web → api → MySQL`，只有本机 `127.0.0.1:8765` 可以访问。它可以安全地作为个人服务运行，但**不能直接把端口开放到公网**——任何能访问页面的人都可以读取、修改和删除全部知识点。
+当前版本已经不是单用户版本：它具备邮箱注册/登录、Argon2id 密码哈希、服务端会话和基于 `owner_id` 的多用户数据隔离。`web → api → MySQL` 三个服务由 Docker Compose 编排，目前只绑定 `127.0.0.1:8765`。
 
-下面按「先能安全上线，再逐步扩展」的顺序给出路线。
+但「局域网可用」和「可以公开注册」之间还有一段距离。公开上线前，至少还要补齐 HTTPS、邮箱验证、密码找回、更严格的防滥用、备份恢复和运维监控。
 
 ---
 
-## 1. 当前架构与差距
+## 1. 现在已经具备什么
+
+| 能力 | 实现 |
+| --- | --- |
+| 账号注册/登录/退出 | `POST /api/auth/register`、`login`、`logout`，`GET /api/auth/me` |
+| 密码存储 | Argon2id 哈希，数据库不保存明文 |
+| 登录会话 | 随机 token；数据库只存 SHA-256 哈希；HttpOnly + SameSite=Lax Cookie |
+| 多用户隔离 | `knowledge_points.owner_id`，所有查询、修改、删除、导入都按当前用户过滤 |
+| 越权访问 | 访问他人知识点统一返回 404，不泄露记录是否存在 |
+| 跨站写请求 | 校验同源 `Origin`；Cookie 使用 SameSite |
+| 认证限流 | Nginx 按 IP 限制 `/api/auth/` 请求频率 |
+| 旧数据迁移 | 第一个注册账号会接管旧版未归属数据 |
+| 数据持久化 | MySQL 8.4 + Docker 卷 `shizhi_mysql_data` |
+
+服务端代码中，用户身份只来自会话：
 
 ```text
-浏览器
-  │ 127.0.0.1:8765
-  ▼
-Nginx（web）
-  │ /api
-  ▼
-FastAPI（api）
-  │ 3306
-  ▼
-MySQL 8.4（mysql，Docker 卷）
+Cookie → token_hash → sessions → user_id → owner_id 过滤
 ```
 
-现有优势：
-
-- 数据库已有独立容器和持久化卷；
-- API 与数据库都没有暴露宿主机端口；
-- 请求有长度、标题、标签等基础校验；
-- 数据可以通过 JSON 和 SQL 备份。
-
-公网化缺少的能力：
-
-| 能力 | 现状 | 公网要求 |
-| --- | --- | --- |
-| 身份认证 | 无 | 注册/登录、密码哈希、会话 |
-| 数据隔离 | 所有数据共享 | 每条记录归属某个用户 |
-| 权限 | 全部可读写 | 只能操作自己的数据 |
-| HTTPS | 无 | 强制 HTTPS |
-| 滥用防护 | 无 | 限流、配额、验证码 |
-| 运维 | 日志/健康检查 | 监控、告警、备份恢复演练 |
-| 合规 | 无 | 隐私政策、账号注销、数据删除 |
+**不要**接受客户端传来的 `user_id` 或 `owner_id` 作为身份依据；当前实现也没有这样做。
 
 ---
 
-## 2. 目标架构
+## 2. 公网化还缺什么
+
+| 能力 | 当前 | 公网要求 |
+| --- | --- | --- |
+| HTTPS | 本地 HTTP | 强制 HTTPS、HSTS、Secure Cookie |
+| 邮箱真实性 | 注册不验证邮箱 | 邮箱验证链接 |
+| 密码找回 | 未实现 | 一次性 reset token + 邮件 |
+| 注册控制 | 开放注册 | 邀请码/验证码/审核，按需选择 |
+| 滥用防护 | 基础 IP 限流 | 登录失败计数、验证码、配额、WAF |
+| 账号生命周期 | 无注销 | 账号停用、数据导出、删除 |
+| 管理能力 | 无后台 | 用户管理、封禁、审计 |
+| 运维 | 健康检查/日志 | 监控、告警、备份恢复演练 |
+| 数据库迁移 | 启动时 `create_all` + 简单迁移 | Alembic/迁移流水线 |
+| 合规 | 无 | 隐私政策、用户协议、数据保留策略 |
+
+---
+
+## 3. 目标架构
 
 ```text
 Internet
-  │ 443
+  │ 443 / HTTPS
   ▼
-Caddy / Traefik / Nginx
+Caddy / Traefik / Cloudflare
   ├── 静态页面
   └── /api → FastAPI（可多副本）
                 │
                 ▼
           MySQL（只在内网）
                 │
-        Redis（可选：会话 / 限流 / 缓存）
+        Redis（可选：限流 / 会话黑名单 / 缓存）
 ```
 
-关键原则：
+原则：
 
-1. **数据库绝不暴露公网**，只允许 API 所在网络访问。
-2. **API 不信任客户端传来的 `user_id`**，用户身份只能从服务端会话解析。
-3. **所有查询都带 `owner_id` 条件**，不能只在页面上隐藏别人的数据。
-4. **TLS 在入口层终止**，应用只监听内网 HTTP。
-5. **备份和恢复都要演练**，只备份不恢复等于没有备份。
+1. 数据库绝不暴露公网；API 也不直接对公网暴露 8000。
+2. 只开放 443（和必要的 80 跳转），关闭 8765/3306。
+3. 用户身份只从服务端会话解析。
+4. 所有数据查询必须带 `owner_id` 条件。
+5. 备份必须能在 staging 环境成功恢复一次。
 
 ---
 
-## 3. 第一阶段：公网 MVP
+## 4. 上线前必须完成的工作
 
-目标：用户可以注册、登录，只看到自己的知识点；站点通过 HTTPS 访问。
+### 4.1 域名、TLS 与反向代理
 
-### 3.1 域名与 HTTPS
-
-- 准备域名，解析到服务器；
+- 域名解析到服务器；
 - 用 Caddy 或 Traefik 自动申请 Let's Encrypt 证书；
-- 只开放 80/443，关闭 8000/3306/8765 的公网访问；
+- 只把 Web 入口暴露到公网，API/MySQL 继续留在 Docker 内部网络；
+- 设置 `COOKIE_SECURE=true`，让会话 Cookie 只通过 HTTPS 发送；
 - 开启 HSTS、强制 HTTPS；
-- 给登录、注册、导入接口加限流。
+- 如果使用 Cloudflare，配置源站证书，不要只依赖 CDN 防护；
+- 如果外层还有一层反向代理，请配置 Nginx `real_ip_header X-Forwarded-For` 和可信代理地址，否则限流会把所有用户看成同一个 IP。
 
-如果不想自己维护证书，可以用 Cloudflare 代理 + 源站证书，但不要只依赖 CDN 的防护。
+当前 Compose 的端口是：
 
-### 3.2 用户与会话表
+```yaml
+ports:
+  - "127.0.0.1:8765:80"
+```
 
-建议新增：
+公网部署时不要让这个端口直接对 `0.0.0.0` 开放。推荐在宿主机增加 Caddy/Traefik，由它反代到 `127.0.0.1:8765`，只公开 443。
+
+### 4.2 邮箱验证与密码找回
+
+新增表：
 
 ```sql
-CREATE TABLE users (
-  id CHAR(36) PRIMARY KEY,
-  email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
-  display_name VARCHAR(80) NOT NULL DEFAULT '',
-  status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
-);
-
-CREATE TABLE sessions (
+CREATE TABLE email_verification_tokens (
   id CHAR(36) PRIMARY KEY,
   user_id CHAR(36) NOT NULL,
   token_hash CHAR(64) NOT NULL UNIQUE,
   expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
   created_at DATETIME NOT NULL,
-  last_seen_at DATETIME NOT NULL,
-  ip VARCHAR(64) NOT NULL DEFAULT '',
-  user_agent VARCHAR(255) NOT NULL DEFAULT '',
-  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX ix_sessions_user (user_id),
-  INDEX ix_sessions_expires (expires_at)
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE password_reset_tokens (
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
+  created_at DATETIME NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 ```
 
-要点：
+流程：
 
-- 密码使用 **Argon2id**（如 `argon2-cffi`）或 bcrypt，绝对不要明文或可逆加密。
-- 会话来使用**随机 256 位 token**，数据库只存 `token_hash`；浏览器存 **HttpOnly + Secure + SameSite=Lax** Cookie。
-- 不要用 `localStorage` 存登录 token；XSS 可以直接读走。
-- 登录成功后轮换 session id，防止会话固定。
-- 支持退出登录、查看/撤销其他设备会话。
-- 密码重置使用一次性、短时效 token；不要通过邮件明文发送新密码。
-- 注册建议先做邀请码或邮箱验证，避免被批量注册。
+- 注册后发送一次性验证链接，验证前限制写操作；
+- 忘记密码只发送 reset 链接，不发送新密码；
+- token 只存哈希，设置短有效期（如 30 分钟），使用后立即失效；
+- 修改密码后撤销该用户全部其他会话；
+- 提供账号注销与数据导出。
 
-### 3.3 知识点归属
+### 4.3 注册控制与反滥用
 
-给现有表加归属字段：
+- 用 `ALLOW_REGISTRATION=false` 关闭公开注册；空库时仍允许创建第一个账号；
+- 使用邀请码或管理员创建账号；
+- 开放注册时增加邮箱验证、验证码和频率限制；
+- 登录失败按 IP + 邮箱双重限流；
+- 限制单用户知识点数量、导入大小和请求频率；
+- 监控异常注册和批量写入；
+- 使用 Nginx `limit_req`、Cloudflare 或 WAF 作为第一层防护。
 
-```sql
-ALTER TABLE knowledge_points
-  ADD COLUMN owner_id CHAR(36) NULL AFTER id,
-  ADD INDEX ix_knowledge_owner_updated (owner_id, updated_at);
+### 4.4 安全加固
 
--- 为现有数据创建默认用户后，再执行：
-UPDATE knowledge_points SET owner_id = '<默认用户ID>' WHERE owner_id IS NULL;
-
-ALTER TABLE knowledge_points
-  MODIFY owner_id CHAR(36) NOT NULL,
-  ADD CONSTRAINT fk_knowledge_owner
-    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE;
-```
-
-然后修改 API：
-
-- `GET /api/knowledge` 只查当前会话用户；
-- `POST` 写入时由服务端设置 `owner_id`；
-- `PUT` / `DELETE` / `PATCH` 先按 `id + owner_id` 查记录，查不到返回 404；
-- 不要接受客户端传入的 `owner_id`；
-- 加测试：用户 A 不能读取、修改、删除用户 B 的记录。
-
-### 3.4 认证接口
-
-建议新增：
-
-```text
-POST /api/auth/register
-POST /api/auth/login
-POST /api/auth/logout
-GET  /api/auth/me
-POST /api/auth/password-reset/request
-POST /api/auth/password-reset/confirm
-```
-
-前端只依赖 `GET /api/auth/me` 判断登录状态，未登录时显示登录页。
-
-### 3.5 安全清单
-
-- [ ] 强制 HTTPS / HSTS
-- [ ] 密码 Argon2id 或 bcrypt
-- [ ] HttpOnly Secure Cookie；不把 token 放 localStorage
-- [ ] 所有写接口校验当前用户归属
-- [ ] CSRF 防护（SameSite + CSRF token 或双重 Cookie）
-- [ ] 登录/注册/导入限流
-- [ ] 请求体大小限制（Nginx + API 双重）
-- [ ] 错误信息不泄露 SQL、堆栈、密码
+- [ ] 修改 `.env` 中的默认数据库密码
+- [ ] 设置 `COOKIE_SECURE=true`
+- [ ] 强制 HTTPS 和 HSTS
+- [ ] 会话 Cookie 保持 HttpOnly + SameSite=Lax
+- [ ] 登录后轮换 session token
+- [ ] 修改密码后撤销所有其他会话
+- [ ] 限制 `Origin` 与 CORS 允许来源
+- [ ] 对认证、导入接口做严格限流
+- [ ] 错误信息不泄露数据库细节
 - [ ] 日志不记录密码、Cookie、完整正文
-- [ ] 管理接口使用独立角色并二次校验
-- [ ] 数据库账号最小权限，禁止 root 连接应用
-- [ ] 定期依赖升级与镜像扫描
-- [ ] 备份加密并定期恢复演练
-- [ ] 隐私政策、用户协议、账号注销与数据删除
+- [ ] 数据库账户最小权限，应用不使用 root
+- [ ] 依赖定期更新与镜像扫描
+- [ ] 加入审计日志（登录、失败、删除、导出）
 
-### 3.6 部署与运维
+### 4.5 数据、备份与迁移
 
-- 用 `.env` 或 Docker secrets/云密钥管理服务保存密码，禁止提交真实 `.env`；
-- 使用 Alembic 管理数据库结构变更，不再依赖启动时 `create_all`；
-- 固定镜像版本，CI 构建并扫描；
-- 添加 `/api/health` 监控、错误告警、磁盘和连接数告警；
-- 备份：每天全量 + 定期 binlog，至少保留 7–30 天，并验证恢复；
-- 发布前在 staging 环境验证登录、权限、导入、恢复。
+- 上线前把启动时建表迁移为 **Alembic** 迁移；
+- 每日全量备份 + binlog；至少保留 7–30 天；
+- 在 staging 定期执行恢复演练；
+- 数据库只允许 API 网络访问；
+- 监控连接数、慢查询、磁盘使用率；
+- 应用日志集中收集，设置错误告警；
+- 对备份文件加密并限制访问。
 
-### 3.7 参考工期
+### 4.6 合规与运营
 
-一个人开发、没有现成账号体系的情况下：
-
-- 域名 + HTTPS + 基本部署：0.5–1 天；
-- 用户注册/登录/会话：2–4 天；
-- `owner_id` 数据迁移 + 全接口隔离：1–2 天；
-- 限流、安全头、日志、备份、测试：2–3 天；
-- 隐私/条款、注销、找回密码：1–2 天。
-
-**大约 1–2 周可以做出可邀请小范围使用的 MVP**，而不是直接公开注册。
-
----
-
-## 4. 第二阶段：公开注册与规模化
-
-当用户量、数据量上来后，再处理这些问题：
-
-### 数据与搜索
-
-- 列表改为服务端分页，不要一次返回全部数据；
-- 搜索改为服务端执行；中文可用 MySQL `FULLTEXT` + `ngram`，数据量很大时用 Meilisearch/OpenSearch；
-- 增加 `(owner_id, updated_at)` 等复合索引；
-- 导入限制条数和总大小，必要时改为后台任务。
-
-### 性能
-
-- API 水平扩容，放在反向代理后面；
-- MySQL 使用托管服务或主从/只读副本；
-- Redis 缓存会话、限流计数和热门查询；
-- 附件/图片使用对象存储，不塞进 MySQL；
-- 静态资源加 hash 文件名和长缓存。
-
-### 运营与内容安全
-
-- 邮箱验证、邀请码、注册验证码；
-- 每用户配额（条数、导入大小、请求频率）；
-- 举报、封禁、内容审核；
-- 审计日志（谁在什么时候删除了什么）；
-- 数据导出、账号注销、保留期策略。
+- 隐私政策、用户协议；
+- 数据导出、账号注销、删除期限；
+- 内容举报、封禁与申诉；
+- 如果面向未成年人或特定行业，补充相应合规要求；
+- 明确服务可用性、备份和免责声明。
 
 ---
 
 ## 5. 推荐的上线顺序
 
-1. 保持当前单用户版本，继续本机使用；
-2. 增加 `users`、`sessions`、`owner_id`，先做登录和权限测试；
-3. 用测试域名部署 staging，只邀请自己和小范围用户；
-4. 通过 HTTPS、限流、备份恢复和安全检查后，再开放注册；
-5. 根据实际用量再拆搜索、缓存和后台任务，不要一开始就过度设计。
+1. 在 staging 完成 HTTPS、`COOKIE_SECURE=true` 和邮箱验证；
+2. 用邀请码邀请 3–5 个真实用户测试；
+3. 完成至少一次 MySQL 备份恢复演练；
+4. 加监控、告警和审计日志；
+5. 再考虑开放注册；
+6. 最后再做服务端分页、Redis、只读副本等性能优化。
 
 ---
 
-## 6. 不要做的事
+## 6. 规模化阶段
 
-- 不要把 `127.0.0.1:8765` 直接改成 `0.0.0.0:8765` 就上线；
-- 不要只在前端隐藏“删除”按钮，后端必须校验权限；
+- 列表改为服务端分页；
+- 中文全文检索可用 MySQL `FULLTEXT` + ngram，或 Meilisearch；
+- 增加 `(owner_id, updated_at)` 复合索引（当前已建）；
+- API 多副本，使用 Redis 存会话黑名单/限流；
+- 托管 MySQL 或主从架构；
+- 图片/附件使用对象存储；
+- 引入后台任务处理邮件、导出、清理过期 token；
+- CI/CD + 数据库迁移流水线。
+
+---
+
+## 7. 不要做的事
+
+- 不要把 `127.0.0.1:8765` 直接改成 `0.0.0.0:8765` 上线；
+- 不要只在前端隐藏别人的数据，后端必须过滤 `owner_id`；
 - 不要把 MySQL 3306 暴露到公网；
-- 不要把 JWT 或密码放在 `localStorage`；
+- 不要把 token、密码放在 `localStorage`；
 - 不要使用示例密码、默认 root 密码上线；
-- 不要在没有恢复演练的情况下认为备份可用。
+- 不要在没验证恢复的情况下认为备份可用；
+- 不要在没有邮箱验证和密码找回的情况下直接开放公众注册。
 
-当前代码是良好的单用户起点；真正公网化时，**认证与数据归属是第一优先级**，其余优化可以随后迭代。
+当前代码已经是一个可用的多用户自托管起点。真正做到公网服务，剩下的是**账号生命周期、传输安全、反滥用和运维体系**，而不是重写业务代码。

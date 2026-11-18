@@ -29,6 +29,9 @@ services:
       DB_NAME: ${MYSQL_DATABASE:-shizhi}
       DB_USER: ${MYSQL_USER:-shizhi}
       DB_PASSWORD: ${MYSQL_PASSWORD:-shizhi_dev_password}
+      SESSION_DAYS: ${SESSION_DAYS:-14}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
     depends_on:
       mysql:
         condition: service_healthy

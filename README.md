@@ -4,12 +4,13 @@
 
 **把知识收进自己的岛屿。**
 
-一个自托管的知识点记录站：记录、分类、标签、搜索、收藏，一条 Docker 命令启动。
+一个带多用户账号隔离的自托管知识点记录站：记录、分类、标签、搜索、收藏，一条 Docker 命令启动。
 
 [![CI](https://github.com/jaker-fk/shizhi/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jaker-fk/shizhi/actions/workflows/ci.yml)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white&style=flat-square)](https://www.docker.com/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white&style=flat-square)](https://fastapi.tiangolo.com/)
 [![MySQL](https://img.shields.io/badge/MySQL-8.4-4479A1?logo=mysql&logoColor=white&style=flat-square)](https://www.mysql.com/)
+[![Auth](https://img.shields.io/badge/Auth-Argon2id%20%2B%20Session-2f7d68?style=flat-square)](#账户与数据隔离)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](#contributing)
 [![GitHub stars](https://img.shields.io/github/stars/jaker-fk/shizhi?style=social)](https://github.com/jaker-fk/shizhi/stargazers)
@@ -37,6 +38,9 @@
 
 | 能力 | 说明 |
 | --- | --- |
+| 👤 账户系统 | 邮箱注册、登录、退出；Argon2id 密码哈希 |
+| 🔒 多用户隔离 | 每条知识点绑定 `owner_id`，所有 API 强制按当前用户过滤 |
+| 🍪 安全会话 | 随机会话 token，数据库只存 SHA-256 哈希；HttpOnly + SameSite Cookie |
 | ✍️ 记录与编辑 | 新建、编辑、删除知识点，删除后可在提示条中撤销 |
 | 🗂 分类与标签 | 分类自由填写；标签用逗号分隔，侧栏自动汇总 |
 | 🔎 搜索 | 搜索标题、正文、分类、标签和来源 |
@@ -46,6 +50,19 @@
 | 📦 导入导出 | JSON 备份、合并导入；旧版 localStorage 数据自动迁移 |
 | 📱 响应式 | 手机端编辑窗自动变为全屏表单 |
 | ⌨️ 快捷键 | `/` 搜索、`N` 新建、`Ctrl/Cmd + Enter` 保存 |
+
+## 账户与数据隔离
+
+<p align="center">
+  <img src="preview-auth.png" alt="拾知登录界面" width="100%">
+</p>
+
+- 密码使用 **Argon2id** 哈希，数据库不保存明文。
+- 登录成功后生成随机会话 token，浏览器只保存 **HttpOnly + SameSite=Lax** Cookie，数据库只存 token 的 SHA-256 哈希。
+- `knowledge_points.owner_id` 绑定用户；列表、读取、修改、删除、收藏、导入全部在服务端按当前用户过滤。
+- 访问别人的知识点统一返回 `404`，不暴露记录是否存在。
+- 写请求校验同源 `Origin`；认证接口按 IP 限速。
+- 旧版单用户数据会在第一个账号注册时自动归属到该账号。
 
 ## 快速开始
 
@@ -62,6 +79,8 @@ docker compose up -d --build
 ```
 
 打开 **<http://127.0.0.1:8765/>**。
+
+首次打开会进入登录页，点击「创建账号」注册第一个用户。之后所有知识点都只属于当前登录账号。
 
 Windows 用户也可以直接双击 `start.bat`，脚本会检查 Docker、构建并启动全部服务。
 
@@ -84,21 +103,24 @@ docker compose down
 ```mermaid
 flowchart LR
     U[浏览器] -->|http://127.0.0.1:8765| W[Nginx<br/>静态页面 + /api 反向代理]
-    W -->|Docker 内部网络| A[FastAPI<br/>SQLAlchemy]
-    A -->|3306 仅内部| D[(MySQL 8.4)]
+    W -->|Docker 内部网络| A[FastAPI<br/>会话认证 + 用户隔离]
+    A -->|3306 仅内部| D[(MySQL 8.4<br/>users / sessions / knowledge_points)]
     D --> V[(Docker Volume<br/>shizhi_mysql_data)]
 ```
 
 - 只有 Web 映射到宿主机 `127.0.0.1:8765`，API 与 MySQL 不暴露端口。
 - API 与前端同源，通过 Nginx 的 `/api` 反向代理访问，无需配置 CORS。
-- 数据库结构由 SQLAlchemy 初始化，知识表为 `knowledge_points`。
+- 数据库由 SQLAlchemy 初始化：`users` 保存账号，`sessions` 保存会话哈希，`knowledge_points.owner_id` 绑定数据归属。
+- 所有知识点接口都要求登录，并在 SQL 查询中附带当前 `owner_id` 条件。
 
 ## 数据存在哪里
 
 | 项目 | 位置 |
 | --- | --- |
 | 数据库 | `shizhi` |
-| 数据表 | `knowledge_points` |
+| 账号表 | `users` |
+| 会话表 | `sessions` |
+| 知识表 | `knowledge_points`（通过 `owner_id` 归属用户） |
 | Docker 卷 | `shizhi_mysql_data` |
 | 容器内路径 | `/var/lib/mysql` |
 
@@ -136,21 +158,25 @@ docker compose exec -T mysql sh -c \
 - 想要一个**不依赖云厂商**的个人知识库
 - 正在学习编程、准备考试、做研究，需要整理概念和代码片段
 - 喜欢用 Docker 托管自己服务的人
-- 想在这个项目基础上做多用户知识库的开发者
+- 想和朋友、家人各自使用独立账号，但共享同一套服务的人
+- 想在这个项目基础上继续做公开知识库的开发者
 
 ## 后续路线
 
 - [x] 知识点 CRUD、搜索、分类、标签、收藏
 - [x] MySQL 持久化与 Docker Compose 编排
 - [x] JSON 导入导出、旧数据自动迁移
+- [x] 用户登录、Argon2id 密码哈希、会话管理
+- [x] 多用户数据隔离与跨站请求校验
 - [x] 健康检查、响应式界面、快捷键
-- [ ] 用户登录与多用户数据隔离
+- [ ] 邮箱验证与密码找回
+- [ ] 用户管理后台与账号注销
 - [ ] Markdown 编辑与实时预览
 - [ ] 服务端分页与全文检索
 - [ ] PWA / 离线模式
 - [ ] 公开演示站
 
-如果你希望它变成可公开访问的服务，请先阅读 [公网部署开发路线](docs/PUBLIC_DEPLOYMENT.md)。当前版本是**单用户、无登录**的私人服务，不建议直接暴露到公网。
+如果你希望它变成公开注册的互联网服务，请继续阅读 [公网部署开发路线](docs/PUBLIC_DEPLOYMENT.md)。当前版本已经支持多账号隔离，但仍建议只在可信网络中使用；开放公网前还需要 HTTPS、邮箱验证、密码找回和更严格的限流策略。
 
 ## 开发与配置
 
@@ -163,6 +189,7 @@ docker compose exec -T mysql sh -c \
 ├── styles.css              # 视觉、布局与响应式
 ├── app.js                  # 交互、筛选、表单、导入导出
 ├── api.js                  # 前端 API 客户端
+├── preview-auth.png        # 登录界面预览
 ├── Dockerfile              # Web 静态镜像（Nginx）
 ├── nginx.conf              # 静态站点与 /api 反向代理
 ├── docker-compose.yml      # web + api + mysql 编排
@@ -170,8 +197,9 @@ docker compose exec -T mysql sh -c \
 ├── backend/
 │   ├── app.py              # FastAPI 路由
 │   ├── db.py               # MySQL 连接与初始化
-│   ├── models.py           # SQLAlchemy 模型
+│   ├── models.py           # 用户、会话、知识点模型
 │   ├── schemas.py          # 请求校验
+│   ├── security.py         # Argon2id、Cookie、会话 token
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── docs/
@@ -195,8 +223,11 @@ docker compose exec -T mysql sh -c \
 | `MYSQL_USER` | `shizhi` | 应用数据库用户 |
 | `MYSQL_PASSWORD` | `shizhi_dev_password` | 应用用户密码 |
 | `MYSQL_ROOT_PASSWORD` | `shizhi_root_dev_password` | MySQL root 密码 |
+| `SESSION_DAYS` | `14` | 登录会话有效天数（1–90） |
+| `COOKIE_SECURE` | `false` | HTTPS 部署时设为 `true`，Cookie 只走加密连接 |
+| `ALLOW_REGISTRATION` | `true` | 设为 `false` 可关闭公开注册；空库时仍允许创建第一个账号 |
 
-`.env` 已被 `.gitignore` 和 `.dockerignore` 排除。公开部署前务必修改默认密码。
+`.env` 已被 `.gitignore` 和 `.dockerignore` 排除。公开部署前务必修改默认密码，并在 HTTPS 后设置 `COOKIE_SECURE=true`。
 
 </details>
 
@@ -206,7 +237,11 @@ docker compose exec -T mysql sh -c \
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
 | `GET` | `/api/health` | 健康检查（含数据库） |
-| `GET` | `/api/knowledge` | 获取全部知识点 |
+| `POST` | `/api/auth/register` | 注册并建立会话 |
+| `POST` | `/api/auth/login` | 登录 |
+| `POST` | `/api/auth/logout` | 退出并清除会话 |
+| `GET` | `/api/auth/me` | 当前登录用户 |
+| `GET` | `/api/knowledge` | 获取当前用户的全部知识点 |
 | `GET` | `/api/knowledge/{id}` | 获取单条 |
 | `POST` | `/api/knowledge` | 新建 |
 | `PUT` | `/api/knowledge/{id}` | 更新 |
@@ -257,7 +292,7 @@ copy(localStorage.getItem("shizhi.knowledge.v1"))
 
 ## 说明
 
-拾知目前是一个面向个人的自托管项目，**没有用户系统**。如果要开放注册或部署到公网，请先完成认证、多租户隔离、HTTPS、限流和备份策略，路线见 [公网部署开发路线](docs/PUBLIC_DEPLOYMENT.md)。
+拾知目前已经支持邮箱账号、会话认证和多用户数据隔离，但仍是一个自托管起步版：注册开放，没有邮箱验证、密码找回、管理后台和审计系统。如果要部署到公网，请先完成 HTTPS、`COOKIE_SECURE=true`、邀请或邮箱验证、更严格的限流和备份恢复演练，路线见 [公网部署开发路线](docs/PUBLIC_DEPLOYMENT.md)。
 
 ---
 

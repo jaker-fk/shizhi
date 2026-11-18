@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 CONTROL_CHARS = re.compile(r"[\u0000-\u0008\u000b\u000c\u000e-\u001f]")
 TAG_SPLIT = re.compile(r"[,，、;；\n]")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MAX_TAGS = 20
 MAX_TAG_LENGTH = 30
 
@@ -119,3 +120,32 @@ class FavoritePayload(BaseModel):
 class ImportRequest(BaseModel):
     # 逐条校验，坏记录/null 跳过，不影响其余数据。
     items: list[Any] = Field(default_factory=list, max_length=2000)
+
+
+class RegisterPayload(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+    displayName: str = Field(default="", max_length=80)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: Any) -> str:
+        email = clean_line(value).lower()
+        if not EMAIL_RE.match(email):
+            raise ValueError("请输入有效的邮箱地址")
+        return email
+
+    @field_validator("displayName", mode="before")
+    @classmethod
+    def normalize_display_name(cls, value: Any) -> str:
+        return clean_line(value)[:80]
+
+
+class LoginPayload(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: Any) -> str:
+        return clean_line(value).lower()

@@ -42,6 +42,21 @@
     "#4d7f91",
   ];
 
+  const TABLE_TEMPLATES = {
+    meeting: {
+      title: "会议时间线",
+      columns: ["会议", "时间", "核心考点", "标志性文件 / 成果", "关键词"],
+    },
+    concept: {
+      title: "概念对照",
+      columns: ["概念", "一句话定义", "关键区别", "例子"],
+    },
+    blank: {
+      title: "未命名表格",
+      columns: ["主题", "内容", "备注"],
+    },
+  };
+
   const state = {
     items: [],
     filter: "all",
@@ -70,6 +85,12 @@
     pendingDeleteId: null,
     searchTimer: null,
     lastEmail: "",
+    tables: [],
+    activeTableId: null,
+    tableDraft: null,
+    tableDirty: false,
+    tableSaving: false,
+    tableSaveTimer: null,
   };
 
   const dom = {
@@ -167,6 +188,30 @@
     accountPopoverName: document.getElementById("accountPopoverName"),
     accountEmail: document.getElementById("accountEmail"),
     logoutBtn: document.getElementById("logoutBtn"),
+    tablesNavBtn: document.getElementById("tablesNavBtn"),
+    tablesDialog: document.getElementById("tablesDialog"),
+    tablesHeading: document.getElementById("tablesHeading"),
+    tablesBackBtn: document.getElementById("tablesBackBtn"),
+    tablesCloseBtn: document.getElementById("tablesCloseBtn"),
+    tablesNewBtn: document.getElementById("tablesNewBtn"),
+    tablesListView: document.getElementById("tablesListView"),
+    tablesEditorView: document.getElementById("tablesEditorView"),
+    tablesEmpty: document.getElementById("tablesEmpty"),
+    tablesListGrid: document.getElementById("tablesListGrid"),
+    emptyNewTableBtn: document.getElementById("emptyNewTableBtn"),
+    tableCreatePanel: document.getElementById("tableCreatePanel"),
+    newTableTitle: document.getElementById("newTableTitle"),
+    newTableTemplate: document.getElementById("newTableTemplate"),
+    createTableConfirm: document.getElementById("createTableConfirm"),
+    createTableCancel: document.getElementById("createTableCancel"),
+    tableTitleInput: document.getElementById("tableTitleInput"),
+    tableDescInput: document.getElementById("tableDescInput"),
+    tableSaveStatus: document.getElementById("tableSaveStatus"),
+    addRowBtn: document.getElementById("addRowBtn"),
+    addColumnBtn: document.getElementById("addColumnBtn"),
+    deleteTableBtn: document.getElementById("deleteTableBtn"),
+    tableHeaderRow: document.getElementById("tableHeaderRow"),
+    tableBody: document.getElementById("tableBody"),
   };
 
   /* =========================================================
@@ -231,6 +276,9 @@
     }
     if (dom.deleteDialog.open) {
       dom.deleteDialog.close();
+    }
+    if (dom.tablesDialog.open) {
+      dom.tablesDialog.close();
     }
 
     hideBootScreen();
@@ -481,6 +529,449 @@
     });
 
     window.addEventListener("shizhi:unauthorized", handleSessionExpired);
+  }
+
+  /* =========================================================
+     知识表格
+     ========================================================= */
+
+  async function openTablesDialog() {
+    if (!state.user || dom.tablesDialog.open) {
+      return;
+    }
+    showTablesList();
+    dom.tablesDialog.showModal();
+    await loadTables();
+  }
+
+  function showTablesList() {
+    ui.activeTableId = null;
+    ui.tableDraft = null;
+    ui.tableDirty = false;
+    if (ui.tableSaveTimer) {
+      window.clearTimeout(ui.tableSaveTimer);
+      ui.tableSaveTimer = null;
+    }
+    dom.tablesListView.hidden = false;
+    dom.tablesEditorView.hidden = true;
+    dom.tablesBackBtn.hidden = true;
+    dom.tablesNewBtn.hidden = false;
+    dom.tablesHeading.textContent = "知识表格";
+    dom.tableCreatePanel.hidden = true;
+    renderTablesList();
+  }
+
+  async function loadTables() {
+    try {
+      ui.tables = await window.KnowledgeAPI.listTables();
+      renderTablesList();
+    } catch (error) {
+      ui.tables = [];
+      renderTablesList();
+      showApiError(error, "读取表格失败，请稍后重试。");
+    }
+  }
+
+  function renderTablesList() {
+    const fragment = document.createDocumentFragment();
+    for (const table of ui.tables) {
+      const card = el("button", "table-list-card");
+      card.type = "button";
+      card.dataset.tableId = table.id;
+      card.appendChild(el("span", "table-list-title", table.title));
+      card.appendChild(
+        el(
+          "span",
+          "table-list-desc",
+          table.description || "没有说明",
+        ),
+      );
+
+      const columns = el("span", "table-list-columns");
+      for (const column of (table.columns || []).slice(0, 4)) {
+        columns.appendChild(el("span", "table-list-column", column));
+      }
+      if ((table.columns || []).length > 4) {
+        columns.appendChild(
+          el("span", "table-list-column", `+${table.columns.length - 4}`),
+        );
+      }
+      card.appendChild(columns);
+
+      const meta = el("span", "table-list-meta");
+      meta.appendChild(
+        el(
+          "span",
+          null,
+          `${table.rowCount || 0} 行 · ${table.columnCount || 0} 列`,
+        ),
+      );
+      meta.appendChild(
+        el("span", null, `更新于 ${relativeTime(table.updatedAt)}`),
+      );
+      card.appendChild(meta);
+      fragment.appendChild(card);
+    }
+
+    dom.tablesListGrid.replaceChildren(fragment);
+    dom.tablesEmpty.hidden = ui.tables.length > 0;
+  }
+
+  function showNewTableForm() {
+    dom.tableCreatePanel.hidden = false;
+    dom.newTableTitle.value = "";
+    dom.newTableTemplate.value = "meeting";
+    window.setTimeout(() => dom.newTableTitle.focus(), 30);
+  }
+
+  async function createTableFromForm() {
+    const templateKey = dom.newTableTemplate.value;
+    const template = TABLE_TEMPLATES[templateKey] || TABLE_TEMPLATES.meeting;
+    const title = dom.newTableTitle.value.trim() || template.title;
+    const columns = [...template.columns];
+    const rows = [columns.map(() => "")];
+
+    dom.createTableConfirm.disabled = true;
+    try {
+      const created = await window.KnowledgeAPI.createTable({
+        title,
+        description: "",
+        columns,
+        rows,
+      });
+      ui.tables = [created, ...ui.tables];
+      dom.tableCreatePanel.hidden = true;
+      await openTableEditor(created);
+      showToast("表格已创建，可以直接编辑单元格。", { duration: 3000 });
+    } catch (error) {
+      showApiError(error, "创建表格失败，请稍后重试。");
+    } finally {
+      dom.createTableConfirm.disabled = false;
+    }
+  }
+
+  async function openTableEditor(tableOrId) {
+    if (ui.tableDirty && ui.tableDraft) {
+      await flushTableSave();
+    }
+
+    const table =
+      typeof tableOrId === "string"
+        ? ui.tables.find((entry) => entry.id === tableOrId)
+        : tableOrId;
+    if (!table) {
+      showToast("这个表格已经不存在了。", { type: "error" });
+      return;
+    }
+
+    uidOrphanSaveTimer();
+    ui.activeTableId = table.id;
+    ui.tableDraft = {
+      ...table,
+      columns: [...(table.columns || ["列 1"])],
+      rows: (table.rows || []).map((row) => [...row]),
+    };
+    if (!ui.tableDraft.columns.length) {
+      ui.tableDraft.columns = ["列 1"];
+    }
+    if (!ui.tableDraft.rows.length) {
+      ui.tableDraft.rows = [];
+    }
+    ui.tableDirty = false;
+
+    dom.tablesListView.hidden = true;
+    dom.tablesEditorView.hidden = false;
+    dom.tablesBackBtn.hidden = false;
+    dom.tablesNewBtn.hidden = true;
+    dom.tablesHeading.textContent = "编辑表格";
+    dom.tableTitleInput.value = ui.tableDraft.title;
+    dom.tableDescInput.value = ui.tableDraft.description || "";
+    setTableSaveStatus("已保存");
+    renderTableEditor();
+  }
+
+  function uidOrphanSaveTimer() {
+    if (ui.tableSaveTimer) {
+      window.clearTimeout(ui.tableSaveTimer);
+      ui.tableSaveTimer = null;
+    }
+  }
+
+  function renderTableEditor() {
+    if (!ui.tableDraft) {
+      return;
+    }
+    const draft = ui.tableDraft;
+    const headerFragment = document.createDocumentFragment();
+    draft.columns.forEach((column, index) => {
+      const th = document.createElement("th");
+      const wrap = el("div", "table-col-head");
+      const input = el("input", "table-col-input");
+      input.type = "text";
+      input.maxLength = 40;
+      input.value = column;
+      input.dataset.col = String(index);
+      input.setAttribute("aria-label", `第 ${index + 1} 列的列名`);
+      const remove = el("button", "table-col-delete");
+      remove.type = "button";
+      remove.dataset.action = "delete-column";
+      remove.dataset.col = String(index);
+      remove.setAttribute("aria-label", `删除第 ${index + 1} 列`);
+      remove.title = "删除这一列";
+      remove.appendChild(createSvgIcon("close"));
+      wrap.append(input, remove);
+      th.appendChild(wrap);
+      headerFragment.appendChild(th);
+    });
+    const actionHead = document.createElement("th");
+    actionHead.className = "table-row-actions-head";
+    actionHead.textContent = "";
+    headerFragment.appendChild(actionHead);
+    dom.tableHeaderRow.replaceChildren(headerFragment);
+
+    const bodyFragment = document.createDocumentFragment();
+    if (!draft.rows.length) {
+      const emptyRow = document.createElement("tr");
+      emptyRow.className = "table-empty-row";
+      const cell = document.createElement("td");
+      cell.colSpan = draft.columns.length + 1;
+      cell.textContent = "还没有行，点击「添加行」开始记录。";
+      emptyRow.appendChild(cell);
+      bodyFragment.appendChild(emptyRow);
+    } else {
+      draft.rows.forEach((row, rowIndex) => {
+        const tr = document.createElement("tr");
+        draft.columns.forEach((_, columnIndex) => {
+          const td = document.createElement("td");
+          const textarea = el("textarea", "table-cell-input");
+          textarea.rows = 2;
+          textarea.value = row[columnIndex] || "";
+          textarea.dataset.row = String(rowIndex);
+          textarea.dataset.col = String(columnIndex);
+          textarea.setAttribute(
+            "aria-label",
+            `第 ${rowIndex + 1} 行，${draft.columns[columnIndex]}`,
+          );
+          td.appendChild(textarea);
+          tr.appendChild(td);
+        });
+        const actionCell = document.createElement("td");
+        actionCell.className = "table-row-delete-cell";
+        const remove = el("button", "table-row-delete");
+        remove.type = "button";
+        remove.dataset.action = "delete-row";
+        remove.dataset.row = String(rowIndex);
+        remove.setAttribute("aria-label", `删除第 ${rowIndex + 1} 行`);
+        remove.title = "删除这一行";
+        remove.appendChild(createSvgIcon("trash"));
+        actionCell.appendChild(remove);
+        tr.appendChild(actionCell);
+        bodyFragment.appendChild(tr);
+      });
+    }
+    dom.tableBody.replaceChildren(bodyFragment);
+    window.requestAnimationFrame(autoGrowTableCells);
+  }
+
+  function addTableRow() {
+    if (!ui.tableDraft) {
+      return;
+    }
+    if (ui.tableDraft.rows.length >= 500) {
+      showToast("一张表格最多 500 行。", { type: "error" });
+      return;
+    }
+    ui.tableDraft.rows.push(ui.tableDraft.columns.map(() => ""));
+    renderTableEditor();
+    markTableDirty();
+    const rowIndex = ui.tableDraft.rows.length - 1;
+    window.requestAnimationFrame(() => {
+      dom.tableBody
+        .querySelector(`[data-row="${rowIndex}"][data-col="0"]`)
+        ?.focus();
+    });
+  }
+
+  function addTableColumn() {
+    if (!ui.tableDraft) {
+      return;
+    }
+    if (ui.tableDraft.columns.length >= 20) {
+      showToast("一张表格最多 20 列。", { type: "error" });
+      return;
+    }
+    const columnIndex = ui.tableDraft.columns.length;
+    ui.tableDraft.columns.push(`列 ${columnIndex + 1}`);
+    for (const row of ui.tableDraft.rows) {
+      row.push("");
+    }
+    renderTableEditor();
+    markTableDirty();
+    window.requestAnimationFrame(() => {
+      dom.tableHeaderRow
+        .querySelector(`[data-col="${columnIndex}"]`)
+        ?.focus();
+    });
+  }
+
+  function deleteTableColumn(columnIndex) {
+    if (!ui.tableDraft) {
+      return;
+    }
+    if (ui.tableDraft.columns.length <= 1) {
+      showToast("至少保留一列。", { type: "error" });
+      return;
+    }
+    const hasContent = ui.tableDraft.rows.some(
+      (row) => (row[columnIndex] || "").trim() !== "",
+    );
+    if (
+      hasContent &&
+      !window.confirm("这一列还有内容，确定删除整列吗？")
+    ) {
+      return;
+    }
+    ui.tableDraft.columns.splice(columnIndex, 1);
+    for (const row of ui.tableDraft.rows) {
+      row.splice(columnIndex, 1);
+    }
+    renderTableEditor();
+    markTableDirty();
+  }
+
+  function deleteTableRow(rowIndex) {
+    if (!ui.tableDraft) {
+      return;
+    }
+    const hasContent = (ui.tableDraft.rows[rowIndex] || []).some(
+      (cell) => (cell || "").trim() !== "",
+    );
+    if (hasContent && !window.confirm("这一行还有内容，确定删除吗？")) {
+      return;
+    }
+    ui.tableDraft.rows.splice(rowIndex, 1);
+    renderTableEditor();
+    markTableDirty();
+  }
+
+  function autoGrowTableCells() {
+    for (const textarea of dom.tableBody.querySelectorAll(".table-cell-input")) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.max(60, textarea.scrollHeight)}px`;
+    }
+  }
+
+  function setTableSaveStatus(text, mode = "") {
+    dom.tableSaveStatus.textContent = text;
+    dom.tableSaveStatus.classList.toggle("is-saving", mode === "saving");
+    dom.tableSaveStatus.classList.toggle("is-error", mode === "error");
+  }
+
+  function markTableDirty() {
+    if (!ui.tableDraft) {
+      return;
+    }
+    ui.tableDirty = true;
+    setTableSaveStatus("未保存");
+    uidOrphanSaveTimer();
+    ui.tableSaveTimer = window.setTimeout(() => {
+      flushTableSave();
+    }, 650);
+  }
+
+  function buildTablePayload() {
+    return {
+      title: dom.tableTitleInput.value.trim() || "未命名表格",
+      description: dom.tableDescInput.value.trim(),
+      columns: [...ui.tableDraft.columns],
+      rows: ui.tableDraft.rows.map((row) =>
+        ui.tableDraft.columns.map((_, index) => row[index] || ""),
+      ),
+    };
+  }
+
+  async function flushTableSave() {
+    uidOrphanSaveTimer();
+    if (!ui.tableDraft || !ui.activeTableId) {
+      return;
+    }
+    if (ui.tableSaving) {
+      await new Promise((resolve) => {
+        const wait = () => {
+          if (ui.tableSaving) {
+            window.setTimeout(wait, 80);
+          } else {
+            resolve();
+          }
+        };
+        wait();
+      });
+    }
+    if (!ui.tableDirty || !ui.tableDraft) {
+      return;
+    }
+
+    const tableId = ui.activeTableId;
+    const payload = buildTablePayload();
+    ui.tableDirty = false;
+    ui.tableSaving = true;
+    setTableSaveStatus("保存中…", "saving");
+
+    try {
+      const saved = await window.KnowledgeAPI.updateTable(tableId, payload);
+      const index = ui.tables.findIndex((table) => table.id === tableId);
+      if (index >= 0) {
+        ui.tables[index] = saved;
+      }
+      if (ui.tableDraft && ui.activeTableId === tableId) {
+        ui.tableDraft.updatedAt = saved.updatedAt;
+        if (!ui.tableDirty) {
+          setTableSaveStatus("已保存");
+        }
+      }
+    } catch (error) {
+      ui.tableDirty = true;
+      setTableSaveStatus("保存失败", "error");
+      if (!error || error.status !== 401) {
+        showApiError(error, "表格保存失败，请稍后重试。");
+      }
+    } finally {
+      ui.tableSaving = false;
+    }
+  }
+
+  async function backToTablesList() {
+    await flushTableSave();
+    showTablesList();
+  }
+
+  async function closeTablesDialog() {
+    if (!dom.tablesDialog.open) {
+      return;
+    }
+    await flushTableSave();
+    dom.tablesDialog.close();
+  }
+
+  async function deleteActiveTable() {
+    if (!ui.tableDraft) {
+      return;
+    }
+    const title = ui.tableDraft.title || "未命名表格";
+    if (!window.confirm(`确定删除表格《${title}》吗？`)) {
+      return;
+    }
+    dom.deleteTableBtn.disabled = true;
+    try {
+      await window.KnowledgeAPI.removeTable(ui.tableDraft.id);
+      ui.tables = ui.tables.filter((table) => table.id !== ui.tableDraft.id);
+      showToast("表格已删除。");
+      showTablesList();
+    } catch (error) {
+      showApiError(error, "删除表格失败，请稍后重试。");
+    } finally {
+      dom.deleteTableBtn.disabled = false;
+    }
   }
 
   function loadPreferences() {
@@ -846,7 +1337,7 @@
   }
 
   function anyDialogOpen() {
-    return dom.editorDialog.open || dom.deleteDialog.open;
+    return dom.editorDialog.open || dom.deleteDialog.open || dom.tablesDialog.open;
   }
 
   /* =========================================================
@@ -2165,6 +2656,7 @@
 
     dom.navAll.addEventListener("click", selectAll);
     dom.navFavorites.addEventListener("click", selectFavorites);
+    dom.tablesNavBtn.addEventListener("click", openTablesDialog);
 
     dom.categoryList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-category]");
@@ -2340,6 +2832,95 @@
 
     dom.deleteDialog.addEventListener("close", () => {
       ui.pendingDeleteId = null;
+    });
+
+    dom.tablesCloseBtn.addEventListener("click", () => closeTablesDialog());
+    dom.tablesBackBtn.addEventListener("click", () => backToTablesList());
+    dom.tablesNewBtn.addEventListener("click", showNewTableForm);
+    dom.emptyNewTableBtn.addEventListener("click", showNewTableForm);
+    dom.createTableConfirm.addEventListener("click", createTableFromForm);
+    dom.createTableCancel.addEventListener("click", () => {
+      dom.tableCreatePanel.hidden = true;
+    });
+    dom.newTableTitle.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        createTableFromForm();
+      } else if (event.key === "Escape") {
+        dom.tableCreatePanel.hidden = true;
+      }
+    });
+
+    dom.tablesListGrid.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-table-id]");
+      if (card) {
+        openTableEditor(card.dataset.tableId);
+      }
+    });
+
+    dom.tableTitleInput.addEventListener("input", () => {
+      if (!ui.tableDraft) return;
+      ui.tableDraft.title = dom.tableTitleInput.value;
+      markTableDirty();
+    });
+    dom.tableDescInput.addEventListener("input", () => {
+      if (!ui.tableDraft) return;
+      ui.tableDraft.description = dom.tableDescInput.value;
+      markTableDirty();
+    });
+
+    dom.tablesEditorView.addEventListener("input", (event) => {
+      const target = event.target;
+      if (!ui.tableDraft) return;
+      if (target.classList.contains("table-col-input")) {
+        const index = Number(target.dataset.col);
+        ui.tableDraft.columns[index] = target.value;
+        markTableDirty();
+      } else if (target.classList.contains("table-cell-input")) {
+        const row = Number(target.dataset.row);
+        const column = Number(target.dataset.col);
+        if (ui.tableDraft.rows[row]) {
+          ui.tableDraft.rows[row][column] = target.value;
+          target.style.height = "auto";
+          target.style.height = `${Math.max(60, target.scrollHeight)}px`;
+          markTableDirty();
+        }
+      }
+    });
+
+    dom.tablesEditorView.addEventListener("click", (event) => {
+      const actionButton = event.target.closest("[data-action]");
+      if (actionButton) {
+        if (actionButton.dataset.action === "delete-column") {
+          deleteTableColumn(Number(actionButton.dataset.col));
+        } else if (actionButton.dataset.action === "delete-row") {
+          deleteTableRow(Number(actionButton.dataset.row));
+        }
+        return;
+      }
+      if (
+        event.target === dom.tableBody ||
+        event.target.closest(".table-empty-row")
+      ) {
+        addTableRow();
+      }
+    });
+
+    dom.addRowBtn.addEventListener("click", addTableRow);
+    dom.addColumnBtn.addEventListener("click", addTableColumn);
+    dom.deleteTableBtn.addEventListener("click", deleteActiveTable);
+
+    dom.tablesDialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeTablesDialog();
+    });
+    dom.tablesDialog.addEventListener("click", (event) => {
+      if (event.target === dom.tablesDialog) {
+        closeTablesDialog();
+      }
+    });
+    dom.tablesDialog.addEventListener("close", () => {
+      showTablesList();
     });
 
     document.addEventListener("keydown", handleGlobalKeydown);

@@ -120,6 +120,26 @@
     });
   }
 
+  async function listTables() {
+    const data = await request("/tables");
+    return data && Array.isArray(data.items) ? data.items : [];
+  }
+
+  function createTable(payload) {
+    return request("/tables", { method: "POST", body: payload });
+  }
+
+  function updateTable(id, payload) {
+    return request(`/tables/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: payload,
+    });
+  }
+
+  function removeTable(id) {
+    return request(`/tables/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
   function register(payload) {
     return request("/auth/register", { method: "POST", body: payload });
   }
@@ -144,6 +164,10 @@
     setFavorite,
     setMastered,
     importItems,
+    listTables,
+    createTable,
+    updateTable,
+    removeTable,
     register,
     login,
     me,

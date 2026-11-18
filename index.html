@@ -258,6 +258,13 @@
             </span>
             <span class="nav-count" id="countFavorites">0</span>
           </button>
+          <button class="nav-item nav-tables" id="tablesNavBtn" type="button">
+            <span class="nav-label">
+              <svg class="icon" aria-hidden="true"><use href="#icon-table"></use></svg>
+              知识表格
+            </span>
+            <span class="nav-arrow" aria-hidden="true">↗</span>
+          </button>
         </nav>
 
         <section class="sidebar-section" aria-labelledby="categoryHeading">
@@ -502,6 +509,96 @@
         </div>
       </footer>
     </form>
+  </dialog>
+
+  <dialog class="tables-dialog" id="tablesDialog" aria-labelledby="tablesHeading">
+    <div class="tables-panel">
+      <header class="tables-head">
+        <div class="tables-heading">
+          <button class="icon-button tables-back" id="tablesBackBtn" type="button" aria-label="返回表格列表" title="返回表格列表" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#icon-undo"></use></svg>
+          </button>
+          <div>
+            <p class="eyebrow">STRUCTURED NOTES</p>
+            <h2 id="tablesHeading">知识表格</h2>
+          </div>
+        </div>
+        <div class="tables-head-actions">
+          <button class="button button-primary" id="tablesNewBtn" type="button">
+            <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+            <span>新建表格</span>
+          </button>
+          <button class="icon-button dialog-close" id="tablesCloseBtn" type="button" aria-label="关闭知识表格">
+            <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="tables-body">
+        <section class="tables-list-view" id="tablesListView">
+          <p class="tables-list-lead">用自定义列保存会议、时间线、概念对照等结构化知识。</p>
+
+          <div class="table-create-panel" id="tableCreatePanel" hidden>
+            <input class="input" id="newTableTitle" type="text" maxlength="120" placeholder="表格名称，例如：会议时间线">
+            <select class="input table-template-select" id="newTableTemplate" aria-label="表格模板">
+              <option value="meeting">会议时间线模板</option>
+              <option value="concept">概念对照模板</option>
+              <option value="blank">空白表格</option>
+            </select>
+            <button class="button button-primary" id="createTableConfirm" type="button">创建</button>
+            <button class="button button-ghost" id="createTableCancel" type="button">取消</button>
+          </div>
+
+          <div class="tables-empty" id="tablesEmpty">
+            <div class="tables-empty-icon" aria-hidden="true">
+              <svg class="icon"><use href="#icon-table"></use></svg>
+            </div>
+            <h3>用表格整理关联知识</h3>
+            <p>会议、时间事件、文件与关键词可以放在同一行里，比卡片更适合对照记忆。</p>
+            <button class="button button-primary" id="emptyNewTableBtn" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+              新建第一张表格
+            </button>
+          </div>
+
+          <div class="tables-list-grid" id="tablesListGrid"></div>
+        </section>
+
+        <section class="tables-editor-view" id="tablesEditorView" hidden>
+          <div class="tables-editor-head">
+            <div class="table-meta-fields">
+              <input class="table-title-input" id="tableTitleInput" type="text" maxlength="120" placeholder="表格名称" aria-label="表格名称">
+              <input class="table-desc-input" id="tableDescInput" type="text" maxlength="500" placeholder="写一句说明，可选" aria-label="表格说明">
+            </div>
+            <span class="table-save-status" id="tableSaveStatus">已保存</span>
+          </div>
+
+          <div class="tables-editor-tools">
+            <button class="button button-ghost table-tool-button" id="addRowBtn" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+              添加行
+            </button>
+            <button class="button button-ghost table-tool-button" id="addColumnBtn" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+              添加列
+            </button>
+            <button class="button button-ghost table-delete-button" id="deleteTableBtn" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
+              删除表格
+            </button>
+          </div>
+
+          <div class="table-grid-wrap">
+            <table class="editable-table">
+              <thead>
+                <tr id="tableHeaderRow"></tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
   </dialog>
 
   <dialog class="confirm-dialog" id="deleteDialog" aria-labelledby="deleteTitle">

@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import get_db, init_db
-from models import KnowledgePoint, User, UserSession, utcnow
+from models import KnowledgePoint, KnowledgeTable, User, UserSession, utcnow
 from schemas import (
     FavoritePayload,
     ImportRequest,
@@ -25,6 +25,9 @@ from schemas import (
     LoginPayload,
     MasteredPayload,
     RegisterPayload,
+    TablePayload,
+    clean_line,
+    clean_text,
 )
 from security import (
     SESSION_COOKIE,
@@ -128,6 +131,54 @@ def apply_payload(point: KnowledgePoint, payload: KnowledgeUpdate) -> None:
     point.tags = payload.tags
     point.source = payload.source
     point.favorite = payload.favorite
+
+
+def normalize_table_payload(payload: TablePayload) -> tuple[str, str, list[str], list[list[str]]]:
+    title = clean_line(payload.title)[:120] or "未命名表格"
+    description = clean_text(payload.description)[:500]
+    columns = [
+        clean_line(column)[:40] or f"列 {index + 1}"
+        for index, column in enumerate(payload.columns[:20])
+    ]
+    if not columns:
+        columns = ["列 1"]
+
+    rows = []
+    for raw_row in payload.rows[:500]:
+        row = []
+        for index in range(len(columns)):
+            value = raw_row[index] if index < len(raw_row) else ""
+            row.append(clean_text(value)[:2000])
+        rows.append(row)
+    return title, description, columns, rows
+
+
+def serialize_table(table: KnowledgeTable) -> dict:
+    columns = table.columns or []
+    rows = table.rows or []
+    return {
+        "id": table.id,
+        "title": table.title,
+        "description": table.description or "",
+        "columns": columns,
+        "rows": rows,
+        "columnCount": len(columns),
+        "rowCount": len(rows),
+        "createdAt": as_iso(table.created_at),
+        "updatedAt": as_iso(table.updated_at),
+    }
+
+
+def get_owned_table(db: Session, table_id: str, user: User) -> KnowledgeTable:
+    table = db.scalar(
+        select(KnowledgeTable).where(
+            KnowledgeTable.id == table_id,
+            KnowledgeTable.owner_id == user.id,
+        )
+    )
+    if table is None:
+        raise HTTPException(status_code=404, detail="表格不存在")
+    return table
 
 
 def get_current_session(
@@ -463,3 +514,80 @@ def import_knowledge(
         skipped,
     )
     return {"added": added, "updated": updated, "skipped": skipped}
+
+
+@app.get("/api/tables")
+def list_tables(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    tables = db.scalars(
+        select(KnowledgeTable)
+        .where(KnowledgeTable.owner_id == user.id)
+        .order_by(KnowledgeTable.updated_at.desc())
+    ).all()
+    return {"items": [serialize_table(table) for table in tables], "count": len(tables)}
+
+
+@app.get("/api/tables/{table_id}")
+def get_table(
+    table_id: str,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    return serialize_table(get_owned_table(db, table_id, user))
+
+
+@app.post("/api/tables", status_code=status.HTTP_201_CREATED)
+def create_table(
+    payload: TablePayload,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    title, description, columns, rows = normalize_table_payload(payload)
+    now = utcnow()
+    table = KnowledgeTable(
+        id=str(uuid.uuid4()),
+        owner_id=user.id,
+        title=title,
+        description=description,
+        columns=columns,
+        rows=rows,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(table)
+    db.commit()
+    db.refresh(table)
+    return serialize_table(table)
+
+
+@app.put("/api/tables/{table_id}")
+def update_table(
+    table_id: str,
+    payload: TablePayload,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    table = get_owned_table(db, table_id, user)
+    title, description, columns, rows = normalize_table_payload(payload)
+    table.title = title
+    table.description = description
+    table.columns = columns
+    table.rows = rows
+    table.updated_at = utcnow()
+    db.commit()
+    db.refresh(table)
+    return serialize_table(table)
+
+
+@app.delete("/api/tables/{table_id}")
+def delete_table(
+    table_id: str,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    table = get_owned_table(db, table_id, user)
+    db.delete(table)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

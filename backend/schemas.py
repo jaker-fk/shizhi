@@ -140,6 +140,27 @@ class ImportRequest(BaseModel):
     items: list[Any] = Field(default_factory=list, max_length=2000)
 
 
+class TablePayload(BaseModel):
+    title: str = Field(default="未命名表格", max_length=120)
+    description: str = Field(default="", max_length=500)
+    columns: list[str] = Field(
+        default_factory=lambda: ["列 1"],
+        max_length=20,
+    )
+    rows: list[list[str]] = Field(default_factory=list, max_length=500)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, value: Any) -> str:
+        title = clean_line(value)[:120]
+        return title or "未命名表格"
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def normalize_description(cls, value: Any) -> str:
+        return clean_text(value)[:500]
+
+
 class RegisterPayload(BaseModel):
     email: str = Field(max_length=254)
     password: str = Field(min_length=8, max_length=128)

@@ -58,6 +58,7 @@
   };
 
   const state = {
+    page: "knowledge",
     items: [],
     filter: "all",
     category: null,
@@ -91,6 +92,7 @@
     tableDirty: false,
     tableSaving: false,
     tableSaveTimer: null,
+    tablesLoading: false,
   };
 
   const dom = {
@@ -100,6 +102,7 @@
     searchBox: document.querySelector(".searchbox"),
     brandLink: document.getElementById("brandLink"),
     newBtn: document.getElementById("newBtn"),
+    newBtnLabel: document.querySelector("#newBtn > span"),
     importBtn: document.getElementById("importBtn"),
     exportBtn: document.getElementById("exportBtn"),
     importInput: document.getElementById("importInput"),
@@ -118,9 +121,18 @@
     gridViewBtn: document.getElementById("gridViewBtn"),
     listViewBtn: document.getElementById("listViewBtn"),
     memoryViewBtn: document.getElementById("memoryViewBtn"),
+    contentHead: document.querySelector(".content-head"),
     filterBar: document.getElementById("filterBar"),
     resultNote: document.getElementById("resultNote"),
     cardGrid: document.getElementById("cardGrid"),
+    tablesPage: document.getElementById("tablesPage"),
+    tablesPageBody: document.getElementById("tablesPageBody"),
+    tablesPageEmpty: document.getElementById("tablesPageEmpty"),
+    tablesPageEmptyTitle: document.getElementById("tablesPageEmptyTitle"),
+    tablesPageEmptyText: document.getElementById("tablesPageEmptyText"),
+    tablesPageEmptyBtn: document.getElementById("tablesPageEmptyBtn"),
+    tablesPageCount: document.getElementById("tablesPageCount"),
+    tablesPageNewBtn: document.getElementById("tablesPageNewBtn"),
     memoryView: document.getElementById("memoryView"),
     memoryTableWrap: document.getElementById("memoryTableWrap"),
     memoryTableBody: document.getElementById("memoryTableBody"),
@@ -245,6 +257,9 @@
   async function onAuthenticated(user) {
     state.user = user;
     state.booted = true;
+    state.page = "knowledge";
+    ui.tables = [];
+    ui.tablesLoading = false;
     updateAccountUI(user);
     hideBootScreen();
     hideAuth();
@@ -259,6 +274,7 @@
 
   function showAuth(mode = "login", message = "") {
     state.user = null;
+    state.page = "knowledge";
     state.items = [];
     state.filter = "all";
     state.category = null;
@@ -266,6 +282,11 @@
     state.query = "";
     state.loading = false;
     state.loadError = false;
+    ui.tables = [];
+    ui.tablesLoading = false;
+    ui.activeTableId = null;
+    ui.tableDraft = null;
+    ui.tableDirty = false;
     if (dom.searchInput) {
       dom.searchInput.value = "";
     }
@@ -535,13 +556,26 @@
      知识表格
      ========================================================= */
 
-  async function openTablesDialog() {
-    if (!state.user || dom.tablesDialog.open) {
+  async function openTablesDialog({ showCreate = false, tableId = null } = {}) {
+    if (!state.user) {
+      return;
+    }
+    if (dom.tablesDialog.open) {
+      if (tableId) {
+        await openTableEditor(tableId);
+      } else if (showCreate) {
+        showNewTableForm();
+      }
       return;
     }
     showTablesList();
     dom.tablesDialog.showModal();
     await loadTables();
+    if (tableId) {
+      await openTableEditor(tableId);
+    } else if (showCreate) {
+      showNewTableForm();
+    }
   }
 
   function showTablesList() {
@@ -562,13 +596,21 @@
   }
 
   async function loadTables() {
+    ui.tablesLoading = true;
+    if (state.page === "tables") {
+      renderTablesPage();
+    }
     try {
       ui.tables = await window.KnowledgeAPI.listTables();
-      renderTablesList();
     } catch (error) {
       ui.tables = [];
-      renderTablesList();
       showApiError(error, "读取表格失败，请稍后重试。");
+    } finally {
+      ui.tablesLoading = false;
+      renderTablesList();
+      if (state.page === "tables") {
+        renderTablesPage();
+      }
     }
   }
 
@@ -641,6 +683,9 @@
       });
       ui.tables = [created, ...ui.tables];
       dom.tableCreatePanel.hidden = true;
+      if (state.page === "tables") {
+        renderTablesPage();
+      }
       await openTableEditor(created);
       showToast("表格已创建，可以直接编辑单元格。", { duration: 3000 });
     } catch (error) {
@@ -929,6 +974,9 @@
           setTableSaveStatus("已保存");
         }
       }
+      if (state.page === "tables") {
+        renderTablesPage();
+      }
     } catch (error) {
       ui.tableDirty = true;
       setTableSaveStatus("保存失败", "error");
@@ -965,6 +1013,9 @@
     try {
       await window.KnowledgeAPI.removeTable(ui.tableDraft.id);
       ui.tables = ui.tables.filter((table) => table.id !== ui.tableDraft.id);
+      if (state.page === "tables") {
+        renderTablesPage();
+      }
       showToast("表格已删除。");
       showTablesList();
     } catch (error) {
@@ -1345,8 +1396,19 @@
      ========================================================= */
 
   function render() {
-    const visibleItems = getVisibleItems();
     renderSidebar();
+
+    if (state.page === "tables") {
+      renderTablesPage();
+      updateSearchUI();
+      syncTopNewButton();
+      return;
+    }
+
+    dom.tablesPage.hidden = true;
+    dom.contentHead.hidden = false;
+
+    const visibleItems = getVisibleItems();
     renderHeading(visibleItems);
     renderFilterBar();
     renderResultNote(visibleItems);
@@ -1354,6 +1416,186 @@
     renderCategoryOptions();
     updateSearchUI();
     syncPreferenceControls();
+    syncTopNewButton();
+  }
+
+  function openTablesPage() {
+    state.page = "tables";
+    state.query = "";
+    dom.searchInput.value = "";
+    ui.tablesLoading = ui.tables.length === 0;
+    render();
+    loadTables();
+  }
+
+  function syncTopNewButton() {
+    const onTablesPage = state.page === "tables";
+    dom.newBtnLabel.textContent = onTablesPage ? "新建表格" : "新建知识点";
+    dom.newBtn.setAttribute(
+      "aria-label",
+      onTablesPage ? "新建知识表格" : "新建知识点",
+    );
+    dom.importBtn.hidden = onTablesPage;
+    dom.exportBtn.hidden = onTablesPage;
+  }
+
+  function handleNewButton() {
+    if (state.page === "tables") {
+      openTablesDialog({ showCreate: true });
+    } else {
+      openEditor();
+    }
+  }
+
+  function tableMatchesQuery(table, tokens) {
+    if (!tokens.length) {
+      return true;
+    }
+    const haystack = [
+      table.title,
+      table.description,
+      (table.columns || []).join(" "),
+      (table.rows || []).flat().join(" "),
+    ]
+      .join(" ")
+      .toLocaleLowerCase("zh-CN");
+    return tokens.every((token) => haystack.includes(token));
+  }
+
+  function renderTablesPage() {
+    dom.contentHead.hidden = true;
+    dom.filterBar.hidden = true;
+    dom.resultNote.hidden = true;
+    dom.cardGrid.hidden = true;
+    dom.memoryView.hidden = true;
+    dom.emptyState.hidden = true;
+    dom.noResults.hidden = true;
+    dom.serverError.hidden = true;
+    dom.tablesPage.hidden = false;
+
+    const tokens = state.query
+      .toLocaleLowerCase("zh-CN")
+      .split(/\s+/)
+      .filter(Boolean);
+    const filtered = ui.tables.filter((table) => tableMatchesQuery(table, tokens));
+    dom.tablesPageCount.textContent = tokens.length
+      ? `${filtered.length} / ${ui.tables.length} 张`
+      : `${ui.tables.length} 张`;
+
+    if (ui.tablesLoading && !ui.tables.length) {
+      showTablesPageEmpty("正在读取表格…", "稍等一下，正在从 MySQL 加载。", "", "");
+      return;
+    }
+    if (!ui.tables.length) {
+      showTablesPageEmpty(
+        "还没有知识表格",
+        "把会议、时间、考点和关键词放进同一张表，对照复习会更清楚。",
+        "新建第一张表格",
+        "create",
+      );
+      return;
+    }
+    if (!filtered.length) {
+      showTablesPageEmpty(
+        "没有匹配的表格",
+        "换个关键词，或者清空搜索查看全部表格。",
+        "清空搜索",
+        "clear",
+      );
+      return;
+    }
+
+    dom.tablesPageEmpty.hidden = true;
+    const fragment = document.createDocumentFragment();
+    for (const table of filtered) {
+      fragment.appendChild(createTablePreview(table));
+    }
+    dom.tablesPageBody.replaceChildren(fragment);
+  }
+
+  function showTablesPageEmpty(title, text, buttonLabel, action) {
+    dom.tablesPageBody.replaceChildren();
+    dom.tablesPageEmpty.hidden = false;
+    dom.tablesPageEmptyTitle.textContent = title;
+    dom.tablesPageEmptyText.textContent = text;
+    dom.tablesPageEmptyBtn.hidden = !buttonLabel;
+    dom.tablesPageEmptyBtn.textContent = buttonLabel;
+    dom.tablesPageEmptyBtn.dataset.action = action;
+  }
+
+  function createTablePreview(table) {
+    const card = el("article", "table-preview-card");
+    const head = el("div", "table-preview-head");
+    const copy = el("div", "table-preview-copy");
+    copy.appendChild(el("h3", "table-preview-title", table.title));
+    copy.appendChild(
+      el("p", "table-preview-desc", table.description || "没有说明"),
+    );
+
+    const actions = el("div", "table-preview-actions");
+    actions.appendChild(
+      el(
+        "span",
+        "table-preview-meta",
+        `${table.rowCount || 0} 行 · ${table.columnCount || 0} 列 · ${relativeTime(table.updatedAt)}`,
+      ),
+    );
+    const edit = el("button", "table-preview-edit");
+    edit.type = "button";
+    edit.dataset.editTable = table.id;
+    edit.appendChild(createSvgIcon("edit"));
+    edit.appendChild(document.createTextNode("编辑"));
+    actions.appendChild(edit);
+
+    head.append(copy, actions);
+    card.appendChild(head);
+
+    const columns = table.columns || [];
+    if (!columns.length || !(table.rows || []).length) {
+      card.appendChild(
+        el(
+          "div",
+          "table-preview-empty",
+          columns.length ? "这张表还没有行。" : "这张表还没有列。",
+        ),
+      );
+      return card;
+    }
+
+    const scroll = el("div", "table-preview-scroll");
+    const tableNode = document.createElement("table");
+    tableNode.className = "readonly-table";
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    for (const column of columns) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = column;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    tableNode.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const row of table.rows) {
+      const tr = document.createElement("tr");
+      for (let index = 0; index < columns.length; index += 1) {
+        const td = document.createElement("td");
+        const value = row[index] || "";
+        if (value) {
+          td.textContent = value;
+        } else {
+          td.textContent = "—";
+          td.classList.add("is-empty-cell");
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    tableNode.appendChild(tbody);
+    scroll.appendChild(tableNode);
+    card.appendChild(scroll);
+    return card;
   }
 
   function getVisibleItems() {
@@ -1435,17 +1677,29 @@
 
   function renderSidebar() {
     const favoriteCount = state.items.filter((item) => item.favorite).length;
+    const onKnowledgePage = state.page === "knowledge";
     dom.countAll.textContent = String(state.items.length);
     dom.countFavorites.textContent = String(favoriteCount);
-    dom.navAll.classList.toggle("is-active", state.filter === "all");
-    dom.navFavorites.classList.toggle("is-active", state.filter === "favorites");
+    dom.navAll.classList.toggle(
+      "is-active",
+      onKnowledgePage && state.filter === "all",
+    );
+    dom.navFavorites.classList.toggle(
+      "is-active",
+      onKnowledgePage && state.filter === "favorites",
+    );
+    dom.tablesNavBtn.classList.toggle("is-active", state.page === "tables");
     dom.navAll.setAttribute(
       "aria-pressed",
-      state.filter === "all" ? "true" : "false",
+      onKnowledgePage && state.filter === "all" ? "true" : "false",
     );
     dom.navFavorites.setAttribute(
       "aria-pressed",
-      state.filter === "favorites" ? "true" : "false",
+      onKnowledgePage && state.filter === "favorites" ? "true" : "false",
+    );
+    dom.tablesNavBtn.setAttribute(
+      "aria-pressed",
+      state.page === "tables" ? "true" : "false",
     );
 
     const categories = getCategories();
@@ -1956,6 +2210,14 @@
 
   function updateSearchUI() {
     const hasQuery = state.query.length > 0;
+    const onTablesPage = state.page === "tables";
+    dom.searchInput.placeholder = onTablesPage
+      ? "搜索表格标题、列名或单元格…"
+      : "搜索标题、内容或标签…";
+    dom.searchInput.setAttribute(
+      "aria-label",
+      onTablesPage ? "搜索知识表格" : "搜索知识点",
+    );
     dom.searchClear.hidden = !hasQuery;
     dom.searchKbd.hidden = hasQuery;
     dom.searchBox.classList.toggle("has-query", hasQuery);
@@ -1984,6 +2246,7 @@
      ========================================================= */
 
   function resetFilters() {
+    state.page = "knowledge";
     state.filter = "all";
     state.category = null;
     state.tag = null;
@@ -1999,6 +2262,7 @@
   }
 
   function selectFavorites() {
+    state.page = "knowledge";
     state.filter = "favorites";
     state.category = null;
     state.tag = null;
@@ -2006,6 +2270,7 @@
   }
 
   function selectCategory(key) {
+    state.page = "knowledge";
     if (state.filter === "category" && state.category === key) {
       state.filter = "all";
       state.category = null;
@@ -2019,6 +2284,7 @@
   }
 
   function selectTag(tag) {
+    state.page = "knowledge";
     if (state.tag === tag) {
       state.tag = null;
     } else {
@@ -2645,7 +2911,7 @@
      ========================================================= */
 
   function bindEvents() {
-    dom.newBtn.addEventListener("click", () => openEditor());
+    dom.newBtn.addEventListener("click", handleNewButton);
     dom.emptyAddBtn.addEventListener("click", () => openEditor());
     dom.sampleBtn.addEventListener("click", loadSamples);
 
@@ -2656,7 +2922,28 @@
 
     dom.navAll.addEventListener("click", selectAll);
     dom.navFavorites.addEventListener("click", selectFavorites);
-    dom.tablesNavBtn.addEventListener("click", openTablesDialog);
+    dom.tablesNavBtn.addEventListener("click", openTablesPage);
+
+    dom.tablesPageNewBtn.addEventListener("click", () => {
+      openTablesDialog({ showCreate: true });
+    });
+
+    dom.tablesPageEmptyBtn.addEventListener("click", () => {
+      if (dom.tablesPageEmptyBtn.dataset.action === "clear") {
+        state.query = "";
+        dom.searchInput.value = "";
+        render();
+      } else {
+        openTablesDialog({ showCreate: true });
+      }
+    });
+
+    dom.tablesPageBody.addEventListener("click", (event) => {
+      const edit = event.target.closest("[data-edit-table]");
+      if (edit) {
+        openTablesDialog({ tableId: edit.dataset.editTable });
+      }
+    });
 
     dom.categoryList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-category]");
@@ -2921,6 +3208,9 @@
     });
     dom.tablesDialog.addEventListener("close", () => {
       showTablesList();
+      if (state.page === "tables") {
+        renderTablesPage();
+      }
     });
 
     document.addEventListener("keydown", handleGlobalKeydown);
@@ -2970,7 +3260,7 @@
       !isTypingTarget(event.target)
     ) {
       event.preventDefault();
-      openEditor();
+      handleNewButton();
       return;
     }
 

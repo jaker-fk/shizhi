@@ -375,6 +375,34 @@
           </p>
         </section>
 
+        <section class="tables-page" id="tablesPage" hidden aria-labelledby="tablesPageTitle">
+          <div class="tables-page-head">
+            <div class="tables-page-heading">
+              <p class="eyebrow">STRUCTURED NOTES</p>
+              <h2 id="tablesPageTitle">知识表格</h2>
+              <p>以只读表格回顾结构化知识；需要修改时再进入编辑模式。</p>
+            </div>
+            <div class="tables-page-actions">
+              <span class="tables-page-count" id="tablesPageCount">0 张</span>
+              <button class="button button-primary" id="tablesPageNewBtn" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+                新建表格
+              </button>
+            </div>
+          </div>
+
+          <div class="tables-page-body" id="tablesPageBody"></div>
+
+          <div class="tables-page-empty" id="tablesPageEmpty" hidden>
+            <div class="tables-empty-icon" aria-hidden="true">
+              <svg class="icon"><use href="#icon-table"></use></svg>
+            </div>
+            <h3 id="tablesPageEmptyTitle">还没有知识表格</h3>
+            <p id="tablesPageEmptyText">把会议、时间、考点和关键词放进同一张表，对照复习会更清楚。</p>
+            <button class="button button-primary" id="tablesPageEmptyBtn" type="button">新建第一张表格</button>
+          </div>
+        </section>
+
         <section class="empty-state" id="emptyState" hidden>
           <div class="empty-art" aria-hidden="true">
             <span class="paper paper-back"></span>

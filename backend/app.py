@@ -23,6 +23,7 @@ from schemas import (
     KnowledgeCreate,
     KnowledgeUpdate,
     LoginPayload,
+    MasteredPayload,
     RegisterPayload,
 )
 from security import (
@@ -99,10 +100,12 @@ def serialize(point: KnowledgePoint) -> dict:
         "id": point.id,
         "title": point.title,
         "content": point.content,
+        "mnemonic": point.mnemonic or "",
         "category": point.category,
         "tags": point.tags or [],
         "source": point.source,
         "favorite": bool(point.favorite),
+        "mastered": bool(point.mastered),
         "createdAt": as_iso(point.created_at),
         "updatedAt": as_iso(point.updated_at),
     }
@@ -120,6 +123,7 @@ def serialize_user(user: User) -> dict:
 def apply_payload(point: KnowledgePoint, payload: KnowledgeUpdate) -> None:
     point.title = payload.title
     point.content = payload.content
+    point.mnemonic = payload.mnemonic
     point.category = payload.category
     point.tags = payload.tags
     point.source = payload.source
@@ -315,10 +319,12 @@ def create_knowledge(
         owner_id=user.id,
         title=payload.title,
         content=payload.content,
+        mnemonic=payload.mnemonic,
         category=payload.category,
         tags=payload.tags,
         source=payload.source,
         favorite=payload.favorite,
+        mastered=payload.mastered,
         created_at=as_utc_naive(payload.createdAt) or now,
         updated_at=as_utc_naive(payload.updatedAt) or now,
     )
@@ -357,6 +363,21 @@ def set_favorite(
     point = get_owned_point(db, item_id, user)
     if point.favorite != payload.favorite:
         point.favorite = payload.favorite
+        db.commit()
+        db.refresh(point)
+    return serialize(point)
+
+
+@app.patch("/api/knowledge/{item_id}/mastered")
+def set_mastered(
+    item_id: str,
+    payload: MasteredPayload,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    point = get_owned_point(db, item_id, user)
+    if point.mastered != payload.mastered:
+        point.mastered = payload.mastered
         db.commit()
         db.refresh(point)
     return serialize(point)
@@ -411,10 +432,12 @@ def import_knowledge(
                 owner_id=user.id,
                 title=item.title,
                 content=item.content,
+                mnemonic=item.mnemonic,
                 category=item.category,
                 tags=item.tags,
                 source=item.source,
                 favorite=item.favorite,
+                mastered=item.mastered,
                 created_at=created_at,
                 updated_at=as_utc_naive(item.updatedAt) or created_at,
             )
@@ -422,6 +445,8 @@ def import_knowledge(
             added += 1
         else:
             apply_payload(existing, item)
+            if "mastered" in item.model_fields_set:
+                existing.mastered = item.mastered
             existing.created_at = as_utc_naive(item.createdAt) or existing.created_at
             existing.updated_at = as_utc_naive(item.updatedAt) or now
             updated += 1

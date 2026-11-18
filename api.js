@@ -106,6 +106,13 @@
     });
   }
 
+  function setMastered(id, mastered) {
+    return request(`/knowledge/${encodeURIComponent(id)}/mastered`, {
+      method: "PATCH",
+      body: { mastered },
+    });
+  }
+
   function importItems(items) {
     return request("/knowledge/import", {
       method: "POST",
@@ -135,6 +142,7 @@
     update,
     remove,
     setFavorite,
+    setMastered,
     importItems,
     register,
     login,

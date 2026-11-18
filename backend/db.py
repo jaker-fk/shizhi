@@ -63,6 +63,26 @@ def migrate_schema() -> None:
             )
         logger.info("Added owner_id column to existing knowledge_points table.")
 
+    if "mnemonic" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE knowledge_points "
+                    "ADD COLUMN mnemonic VARCHAR(2000) NOT NULL DEFAULT '' AFTER content"
+                )
+            )
+        logger.info("Added mnemonic column to existing knowledge_points table.")
+
+    if "mastered" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "ALTER TABLE knowledge_points "
+                    "ADD COLUMN mastered TINYINT(1) NOT NULL DEFAULT 0 AFTER favorite"
+                )
+            )
+        logger.info("Added mastered column to existing knowledge_points table.")
+
     indexes = {
         index["name"] for index in inspect(engine).get_indexes("knowledge_points")
     }

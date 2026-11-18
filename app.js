@@ -59,6 +59,9 @@
     authMode: "login",
     authBusy: false,
     booted: false,
+    memoryHideAnswers: true,
+    memoryOnlyUnmastered: false,
+    memorySeed: 0,
   };
 
   const ui = {
@@ -93,9 +96,18 @@
     sortSelect: document.getElementById("sortSelect"),
     gridViewBtn: document.getElementById("gridViewBtn"),
     listViewBtn: document.getElementById("listViewBtn"),
+    memoryViewBtn: document.getElementById("memoryViewBtn"),
     filterBar: document.getElementById("filterBar"),
     resultNote: document.getElementById("resultNote"),
     cardGrid: document.getElementById("cardGrid"),
+    memoryView: document.getElementById("memoryView"),
+    memoryTableWrap: document.getElementById("memoryTableWrap"),
+    memoryTableBody: document.getElementById("memoryTableBody"),
+    memoryCount: document.getElementById("memoryCount"),
+    memoryEmpty: document.getElementById("memoryEmpty"),
+    hideAnswersToggle: document.getElementById("hideAnswersToggle"),
+    onlyUnmasteredToggle: document.getElementById("onlyUnmasteredToggle"),
+    shuffleMemoryBtn: document.getElementById("shuffleMemoryBtn"),
     emptyState: document.getElementById("emptyState"),
     emptyAddBtn: document.getElementById("emptyAddBtn"),
     sampleBtn: document.getElementById("sampleBtn"),
@@ -118,6 +130,8 @@
     tagInput: document.getElementById("tagInput"),
     contentInput: document.getElementById("contentInput"),
     contentCount: document.getElementById("contentCount"),
+    mnemonicInput: document.getElementById("mnemonicInput"),
+    mnemonicCount: document.getElementById("mnemonicCount"),
     sourceInput: document.getElementById("sourceInput"),
     favoriteInput: document.getElementById("favoriteInput"),
     deleteDialog: document.getElementById("deleteDialog"),
@@ -477,8 +491,11 @@
         if (prefs && ["updated", "created", "title"].includes(prefs.sort)) {
           state.sort = prefs.sort;
         }
-        if (prefs && ["grid", "list"].includes(prefs.view)) {
+        if (prefs && ["grid", "list", "memory"].includes(prefs.view)) {
           state.view = prefs.view;
+        }
+        if (prefs && typeof prefs.memoryHideAnswers === "boolean") {
+          state.memoryHideAnswers = prefs.memoryHideAnswers;
         }
       }
     } catch (error) {
@@ -490,7 +507,11 @@
     try {
       window.localStorage.setItem(
         PREFS_KEY,
-        JSON.stringify({ sort: state.sort, view: state.view }),
+        JSON.stringify({
+          sort: state.sort,
+          view: state.view,
+          memoryHideAnswers: state.memoryHideAnswers,
+        }),
       );
     } catch (error) {
       /* 偏好不是关键数据，静默失败 */
@@ -545,12 +566,14 @@
       id,
       title: String(raw.title || "未命名知识点"),
       content: typeof raw.content === "string" ? raw.content : "",
+      mnemonic: typeof raw.mnemonic === "string" ? raw.mnemonic : "",
       category: typeof raw.category === "string" ? raw.category : "",
       tags: Array.isArray(raw.tags)
         ? raw.tags.filter((tag) => typeof tag === "string")
         : [],
       source: typeof raw.source === "string" ? raw.source : "",
       favorite: Boolean(raw.favorite),
+      mastered: Boolean(raw.mastered),
       createdAt: raw.createdAt || new Date().toISOString(),
       updatedAt: raw.updatedAt || raw.createdAt || new Date().toISOString(),
     };
@@ -862,6 +885,7 @@
         const haystack = [
           item.title,
           item.content,
+          item.mnemonic,
           item.category,
           item.tags.join(" "),
           item.source,
@@ -1157,6 +1181,7 @@
 
   function renderCards(visibleItems) {
     dom.cardGrid.classList.toggle("is-list", state.view === "list");
+    const isMemoryView = state.view === "memory";
 
     if (state.loading) {
       const skeletonFragment = document.createDocumentFragment();
@@ -1165,6 +1190,7 @@
       }
       dom.cardGrid.replaceChildren(skeletonFragment);
       dom.cardGrid.hidden = false;
+      dom.memoryView.hidden = true;
       dom.emptyState.hidden = true;
       dom.noResults.hidden = true;
       dom.serverError.hidden = true;
@@ -1174,6 +1200,7 @@
     if (state.loadError) {
       dom.cardGrid.replaceChildren();
       dom.cardGrid.hidden = true;
+      dom.memoryView.hidden = true;
       dom.emptyState.hidden = true;
       dom.noResults.hidden = true;
       dom.serverError.hidden = false;
@@ -1181,16 +1208,142 @@
     }
 
     dom.serverError.hidden = true;
+    const isCompletelyEmpty = state.items.length === 0;
+
+    if (isMemoryView) {
+      dom.cardGrid.replaceChildren();
+      dom.cardGrid.hidden = true;
+      dom.emptyState.hidden = !isCompletelyEmpty;
+      dom.noResults.hidden = isCompletelyEmpty || visibleItems.length > 0;
+      dom.memoryView.hidden = isCompletelyEmpty || visibleItems.length === 0;
+      if (!isCompletelyEmpty && visibleItems.length) {
+        renderMemoryTable(visibleItems);
+      }
+      return;
+    }
+
+    dom.memoryView.hidden = true;
     const fragment = document.createDocumentFragment();
     for (const item of visibleItems) {
       fragment.appendChild(createCard(item));
     }
     dom.cardGrid.replaceChildren(fragment);
     dom.cardGrid.hidden = visibleItems.length === 0;
-
-    const isCompletelyEmpty = state.items.length === 0;
     dom.emptyState.hidden = !isCompletelyEmpty;
     dom.noResults.hidden = isCompletelyEmpty || visibleItems.length > 0;
+  }
+
+  function renderMemoryTable(visibleItems) {
+    const items = seededShuffle(
+      state.memoryOnlyUnmastered
+        ? visibleItems.filter((item) => !item.mastered)
+        : visibleItems,
+    );
+
+    dom.hideAnswersToggle.checked = state.memoryHideAnswers;
+    dom.onlyUnmasteredToggle.checked = state.memoryOnlyUnmastered;
+    dom.memoryCount.textContent = `${items.length} 条`;
+    dom.memoryTableWrap.hidden = items.length === 0;
+    dom.memoryEmpty.hidden = !(
+      state.memoryOnlyUnmastered && items.length === 0
+    );
+
+    const fragment = document.createDocumentFragment();
+    for (const item of items) {
+      fragment.appendChild(createMemoryRow(item));
+    }
+    dom.memoryTableBody.replaceChildren(fragment);
+  }
+
+  function createMemoryRow(item) {
+    const row = el("tr", item.mastered ? "is-mastered" : "");
+    row.dataset.id = item.id;
+
+    const categoryCell = el("td");
+    const category = el("span", "category-pill", categoryLabel(categoryKey(item)));
+    category.style.setProperty("--cat-color", categoryColor(categoryKey(item)));
+    categoryCell.appendChild(category);
+
+    const promptCell = el("td");
+    const prompt = el("div", "memory-prompt");
+    const title = el("button", "memory-title", item.title);
+    title.type = "button";
+    title.dataset.action = "edit";
+    title.dataset.id = item.id;
+    title.title = "编辑这条知识点";
+    const edit = iconButton("edit", "编辑知识点", "edit", "memory-edit");
+    edit.dataset.id = item.id;
+    prompt.append(title, edit);
+    promptCell.appendChild(prompt);
+
+    if (item.tags.length) {
+      const tags = el("div", "memory-tags");
+      for (const tag of item.tags) {
+        tags.appendChild(el("span", "memory-tag", `#${tag}`));
+      }
+      promptCell.appendChild(tags);
+    }
+
+    const mnemonicCell = el("td");
+    const mnemonic = el(
+      "div",
+      `memory-mnemonic${item.mnemonic ? "" : " is-empty"}`,
+      item.mnemonic || "还没有联想提示",
+    );
+    mnemonicCell.appendChild(mnemonic);
+
+    const answerCell = el(
+      "td",
+      `memory-answer-cell${state.memoryHideAnswers ? " is-concealed" : ""}`,
+    );
+    const answer = el(
+      "div",
+      `memory-answer-content${item.content ? "" : " is-empty"}`,
+      item.content || "暂无正文",
+    );
+    const reveal = el("button", "memory-reveal", "点击回忆答案");
+    reveal.type = "button";
+    reveal.dataset.action = "reveal";
+    reveal.dataset.id = item.id;
+    answerCell.append(answer, reveal);
+
+    const masteredCell = el("td");
+    const mastered = el(
+      "button",
+      `memory-mastery${item.mastered ? " is-mastered" : ""}`,
+    );
+    mastered.type = "button";
+    mastered.dataset.action = "mastered";
+    mastered.dataset.id = item.id;
+    mastered.setAttribute("aria-pressed", String(item.mastered));
+    mastered.appendChild(createSvgIcon("check"));
+    mastered.appendChild(
+      document.createTextNode(item.mastered ? "已掌握" : "还没记住"),
+    );
+    masteredCell.appendChild(mastered);
+
+    row.append(categoryCell, promptCell, mnemonicCell, answerCell, masteredCell);
+    return row;
+  }
+
+  function seededShuffle(items) {
+    if (!state.memorySeed) {
+      return items;
+    }
+    return [...items].sort(
+      (left, right) =>
+        hashString(`${left.id}:${state.memorySeed}`) -
+        hashString(`${right.id}:${state.memorySeed}`),
+    );
+  }
+
+  function hashString(value) {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
   }
 
   function createSkeletonCard() {
@@ -1325,10 +1478,14 @@
     dom.cardGrid.classList.toggle("is-list", state.view === "list");
 
     const isGrid = state.view === "grid";
+    const isList = state.view === "list";
+    const isMemory = state.view === "memory";
     dom.gridViewBtn.classList.toggle("is-active", isGrid);
-    dom.listViewBtn.classList.toggle("is-active", !isGrid);
-    dom.gridViewBtn.setAttribute("aria-pressed", isGrid ? "true" : "false");
-    dom.listViewBtn.setAttribute("aria-pressed", isGrid ? "false" : "true");
+    dom.listViewBtn.classList.toggle("is-active", isList);
+    dom.memoryViewBtn.classList.toggle("is-active", isMemory);
+    dom.gridViewBtn.setAttribute("aria-pressed", String(isGrid));
+    dom.listViewBtn.setAttribute("aria-pressed", String(isList));
+    dom.memoryViewBtn.setAttribute("aria-pressed", String(isMemory));
   }
 
   /* =========================================================
@@ -1399,6 +1556,7 @@
     dom.categoryInput.value = item ? item.category : "";
     dom.tagInput.value = item ? item.tags.join("，") : "";
     dom.contentInput.value = item ? item.content : "";
+    dom.mnemonicInput.value = item ? item.mnemonic : "";
     dom.sourceInput.value = item ? item.source : "";
     dom.favoriteInput.checked = item ? item.favorite : false;
     dom.editorEyebrow.textContent = item ? "EDIT NOTE" : "NEW NOTE";
@@ -1406,6 +1564,7 @@
     dom.saveBtnText.textContent = item ? "保存修改" : "保存知识点";
     clearTitleError();
     updateContentCount();
+    updateMnemonicCount();
 
     ui.initialSnapshot = getFormSnapshot();
     dom.editorDialog.showModal();
@@ -1424,6 +1583,7 @@
       category: dom.categoryInput.value,
       tags: dom.tagInput.value,
       content: dom.contentInput.value,
+      mnemonic: dom.mnemonicInput.value,
       source: dom.sourceInput.value,
       favorite: dom.favoriteInput.checked,
     });
@@ -1457,6 +1617,7 @@
 
     const title = dom.titleInput.value.trim();
     const content = dom.contentInput.value.trim();
+    const mnemonic = dom.mnemonicInput.value.trim();
     const category = dom.categoryInput.value.trim();
     const tags = parseTags(dom.tagInput.value);
     const source = dom.sourceInput.value.trim();
@@ -1471,7 +1632,15 @@
     }
 
     clearTitleError();
-    const payload = { title, content, category, tags, source, favorite };
+    const payload = {
+      title,
+      content,
+      mnemonic,
+      category,
+      tags,
+      source,
+      favorite,
+    };
     const wasEditing = Boolean(ui.editingId);
     const editingId = ui.editingId;
     setSaving(true);
@@ -1517,6 +1686,11 @@
   function updateContentCount() {
     const count = dom.contentInput.value.length;
     dom.contentCount.textContent = `${count} 字`;
+  }
+
+  function updateMnemonicCount() {
+    const count = dom.mnemonicInput.value.length;
+    dom.mnemonicCount.textContent = `${count} 字`;
   }
 
   /* =========================================================
@@ -1619,6 +1793,40 @@
       }
       render();
       showApiError(error, "收藏操作失败，请稍后重试。");
+    }
+  }
+
+  async function toggleMastered(id) {
+    const item = state.items.find((entry) => entry.id === id);
+    if (!item) {
+      return;
+    }
+
+    const previous = item.mastered;
+    const next = !previous;
+    item.mastered = next;
+    render();
+
+    try {
+      const saved = await window.KnowledgeAPI.setMastered(id, next);
+      const normalized = normalizeApiItem(saved);
+      const index = state.items.findIndex((entry) => entry.id === id);
+      if (index >= 0 && normalized) {
+        state.items[index] = normalized;
+      }
+      setDbStatus("ok");
+      render();
+      showToast(next ? "已标记为掌握。" : "已移回待复习。", {
+        icon: "check",
+        duration: 2200,
+      });
+    } catch (error) {
+      const current = state.items.find((entry) => entry.id === id);
+      if (current) {
+        current.mastered = previous;
+      }
+      render();
+      showApiError(error, "更新掌握状态失败，请稍后重试。");
     }
   }
 
@@ -2007,13 +2215,55 @@
     dom.gridViewBtn.addEventListener("click", () => {
       state.view = "grid";
       savePreferences();
-      syncPreferenceControls();
+      render();
     });
 
     dom.listViewBtn.addEventListener("click", () => {
       state.view = "list";
       savePreferences();
-      syncPreferenceControls();
+      render();
+    });
+
+    dom.memoryViewBtn.addEventListener("click", () => {
+      state.view = "memory";
+      savePreferences();
+      render();
+    });
+
+    dom.hideAnswersToggle.addEventListener("change", () => {
+      state.memoryHideAnswers = dom.hideAnswersToggle.checked;
+      savePreferences();
+      render();
+    });
+
+    dom.onlyUnmasteredToggle.addEventListener("change", () => {
+      state.memoryOnlyUnmastered = dom.onlyUnmasteredToggle.checked;
+      render();
+    });
+
+    dom.shuffleMemoryBtn.addEventListener("click", () => {
+      state.memorySeed = Date.now() % 1000000007;
+      render();
+    });
+
+    dom.memoryTableBody.addEventListener("click", (event) => {
+      const actionButton = event.target.closest("[data-action]");
+      if (!actionButton) {
+        return;
+      }
+      const action = actionButton.dataset.action;
+      const id = actionButton.dataset.id;
+      if (action === "edit") {
+        openEditor(id);
+      } else if (action === "reveal") {
+        const answerCell = actionButton.closest(".memory-answer-cell");
+        if (answerCell) {
+          answerCell.classList.remove("is-concealed");
+          actionButton.blur();
+        }
+      } else if (action === "mastered") {
+        toggleMastered(id);
+      }
     });
 
     dom.cardGrid.addEventListener("click", (event) => {
@@ -2052,6 +2302,7 @@
 
     dom.titleInput.addEventListener("input", clearTitleError);
     dom.contentInput.addEventListener("input", updateContentCount);
+    dom.mnemonicInput.addEventListener("input", updateMnemonicCount);
 
     dom.knowledgeForm.addEventListener("submit", handleSubmit);
 

@@ -52,6 +52,10 @@
       <circle cx="4.5" cy="12" r="1"></circle>
       <circle cx="4.5" cy="18" r="1"></circle>
     </symbol>
+    <symbol id="icon-table" viewBox="0 0 24 24">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2"></rect>
+      <path d="M3.5 10h17M3.5 15h17M9.5 4.5v15"></path>
+    </symbol>
     <symbol id="icon-close" viewBox="0 0 24 24">
       <path d="m6 6 12 12M18 6 6 18"></path>
     </symbol>
@@ -307,6 +311,9 @@
               <button class="view-button" id="listViewBtn" type="button" aria-label="列表视图" aria-pressed="false" title="列表视图">
                 <svg class="icon" aria-hidden="true"><use href="#icon-list"></use></svg>
               </button>
+              <button class="view-button" id="memoryViewBtn" type="button" aria-label="联想记忆表" aria-pressed="false" title="联想记忆表">
+                <svg class="icon" aria-hidden="true"><use href="#icon-table"></use></svg>
+              </button>
             </div>
           </div>
         </section>
@@ -316,6 +323,50 @@
         <div class="result-note" id="resultNote" aria-live="polite"></div>
 
         <section class="card-grid" id="cardGrid" aria-label="知识点列表"></section>
+
+        <section class="memory-view" id="memoryView" hidden aria-labelledby="memoryHeading">
+          <div class="memory-toolbar">
+            <div class="memory-toolbar-copy">
+              <p class="eyebrow">ACTIVE RECALL</p>
+              <h2 id="memoryHeading">联想记忆表</h2>
+              <p>先看提示和联想，试着回忆答案，再点击核对。</p>
+            </div>
+            <div class="memory-tools">
+              <span class="memory-count" id="memoryCount">0 条</span>
+              <label class="memory-check">
+                <input id="hideAnswersToggle" type="checkbox" checked>
+                <span>遮住答案</span>
+              </label>
+              <label class="memory-check">
+                <input id="onlyUnmasteredToggle" type="checkbox">
+                <span>只看未掌握</span>
+              </label>
+              <button class="button button-ghost memory-shuffle" id="shuffleMemoryBtn" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#icon-undo"></use></svg>
+                打乱顺序
+              </button>
+            </div>
+          </div>
+
+          <div class="memory-table-wrap" id="memoryTableWrap">
+            <table class="memory-table">
+              <thead>
+                <tr>
+                  <th scope="col">分类</th>
+                  <th scope="col">提示 / 关键词</th>
+                  <th scope="col">联想记忆</th>
+                  <th scope="col">答案</th>
+                  <th scope="col">掌握</th>
+                </tr>
+              </thead>
+              <tbody id="memoryTableBody"></tbody>
+            </table>
+          </div>
+
+          <p class="memory-empty" id="memoryEmpty" hidden>
+            当前筛选下没有未掌握的知识点。取消「只看未掌握」可以查看全部。
+          </p>
+        </section>
 
         <section class="empty-state" id="emptyState" hidden>
           <div class="empty-art" aria-hidden="true">
@@ -413,6 +464,15 @@
             <span class="char-count" id="contentCount">0 字</span>
           </div>
           <textarea class="input textarea" id="contentInput" name="content" rows="8" maxlength="12000" placeholder="写下解释、例子、代码或自己的理解……"></textarea>
+        </div>
+
+        <div class="field">
+          <div class="label-row">
+            <label for="mnemonicInput">联想记忆 <span class="optional">选填</span></label>
+            <span class="char-count" id="mnemonicCount">0 字</span>
+          </div>
+          <textarea class="input textarea mnemonic-textarea" id="mnemonicInput" name="mnemonic" rows="3" maxlength="2000" placeholder="把知识点和熟悉的事物、场景、谐音或故事连起来……"></textarea>
+          <p class="field-hint">记忆表会把这句联想作为回忆提示，写得越具体越好。</p>
         </div>
 
         <div class="field">

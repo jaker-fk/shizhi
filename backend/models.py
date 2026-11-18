@@ -86,10 +86,12 @@ class KnowledgePoint(Base):
     )
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    mnemonic: Mapped[str] = mapped_column(String(2000), nullable=False, default="")
     category: Mapped[str] = mapped_column(String(30), nullable=False, default="")
     tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     source: Mapped[str] = mapped_column(String(300), nullable=False, default="")
     favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    mastered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow, onupdate=utcnow

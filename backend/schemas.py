@@ -54,6 +54,7 @@ def clean_tags(value: Any) -> list[str]:
 class KnowledgePayload(BaseModel):
     title: str = Field(max_length=120)
     content: str = Field(default="", max_length=12000)
+    mnemonic: str = Field(default="", max_length=2000)
     category: str = Field(default="", max_length=30)
     tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS)
     source: str = Field(default="", max_length=300)
@@ -71,6 +72,11 @@ class KnowledgePayload(BaseModel):
     @classmethod
     def normalize_content(cls, value: Any) -> str:
         return clean_text(value)[:12000]
+
+    @field_validator("mnemonic", mode="before")
+    @classmethod
+    def normalize_mnemonic(cls, value: Any) -> str:
+        return clean_text(value)[:2000]
 
     @field_validator("category", mode="before")
     @classmethod
@@ -99,6 +105,7 @@ class KnowledgeCreate(KnowledgePayload):
     id: str | None = Field(default=None, max_length=100)
     createdAt: datetime | None = None
     updatedAt: datetime | None = None
+    mastered: bool = False
 
     @field_validator("id", mode="before")
     @classmethod
@@ -108,6 +115,13 @@ class KnowledgeCreate(KnowledgePayload):
         cleaned = clean_line(value)[:100]
         return cleaned or None
 
+    @field_validator("mastered", mode="before")
+    @classmethod
+    def normalize_mastered(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.strip().casefold() in {"true", "1", "yes", "on"}
+        return bool(value)
+
 
 class KnowledgeUpdate(KnowledgePayload):
     pass
@@ -115,6 +129,10 @@ class KnowledgeUpdate(KnowledgePayload):
 
 class FavoritePayload(BaseModel):
     favorite: bool
+
+
+class MasteredPayload(BaseModel):
+    mastered: bool
 
 
 class ImportRequest(BaseModel):
